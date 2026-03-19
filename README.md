@@ -3,7 +3,6 @@
 > Build desktop apps with Bun
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm version](https://img.shields.io/npm/v/bunlet.svg)](https://www.npmjs.com/package/bunlet)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0-orange.svg)](https://bun.sh/)
@@ -15,244 +14,291 @@ Bunlet is a modern desktop application framework that combines the speed of [Bun
 | Feature | Bunlet | Electron | Tauri |
 |---------|--------|----------|-------|
 | **Runtime** | Bun | Node.js | None (Rust) |
-| **WebView** | System + CEF | Chromium (bundled) | System only |
-| **Installer Size** | 20-40MB | 80-150MB | 2-10MB |
+| **WebView** | System WebView | Chromium (bundled) | System WebView |
+| **Installer Size** | ~20-40MB | 80-150MB | 2-10MB |
 | **Language** | TypeScript | JavaScript | Rust + JS |
 | **Memory Usage** | Low | High | Very Low |
-| **Learning Curve** | Easy (Electron-like API) | Easy | Moderate (Rust) |
+| **Learning Curve** | Easy (Electron-like API) | Easy | Moderate |
 
 ### Key Advantages
 
-- **Familiar API** - If you know Electron, you know Bunlet
-- **Flexible Rendering** - Choose System WebView (small) or CEF (consistent)
-- **TypeScript-First** - Full type safety out of the box
-- **Fast Development** - Hot reload, DevTools, instant rebuilds
-- **Production Ready** - Code signing, auto-updates, installers
+- **Familiar API** - Electron-compatible API design
+- **TypeScript-First** - Full type safety with Zod validation for IPC
+- **Native Performance** - Rust backend with NAPI bindings
+- **Cross-Platform** - Windows, macOS, and Linux support
+- **Small Footprint** - Uses system WebView (no bundled Chromium)
 
 ## Quick Start
 
 ```bash
-# Install Bunlet CLI globally
-bun add -g @bunlet/cli
+# Clone the repository
+git clone https://github.com/bunlet/bunlet.git
+cd bunlet
 
-# Create a new application
-bunlet create my-app
+# Install dependencies
+bun install
 
-# Navigate to project
-cd my-app
+# Build all packages
+cd packages/bunlet-native && cargo build && cd ../..
+cd packages/bunlet && bun run build && cd ../..
 
-# Start development server
-bunlet dev
+# Run an example
+cd examples/hello-world
+bun run main.ts
 ```
-
-Your app opens automatically with hot reload enabled!
 
 ## Example Application
 
 ```typescript
-// src/main.ts
-import { app, BrowserWindow } from 'bunlet';
+// main.ts
+import { app, BrowserWindow, z } from 'bunlet';
+import path from 'path';
 
-app.whenReady().then(() => {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    title: 'My Bunlet App',
-    webPreferences: {
-      preload: './preload.ts',
-    },
-  });
-
-  win.loadFile('index.html');
+// Register IPC handlers before app is ready
+app.handle('greet', z.object({ name: z.string() }), async (_, params) => {
+  return { message: `Hello, ${params.name}!` };
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
+
+// Wait for app to be ready
+await app.whenReady();
+
+// Create a window
+const win = new BrowserWindow({
+  width: 800,
+  height: 600,
+  title: 'My Bunlet App',
+});
+
+win.loadFile(path.join(import.meta.dir, 'index.html'));
+
+// Run the event loop
+app.run();
 ```
 
-```typescript
-// src/preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet/renderer';
-
-contextBridge.exposeInMainWorld('api', {
-  readFile: (path: string) => ipcRenderer.invoke('fs:read', { path }),
-  platform: process.platform,
-});
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>Hello from Bunlet!</h1>
+  <button onclick="greet()">Greet</button>
+  <script>
+    async function greet() {
+      const result = await window.__bunlet.invoke({
+        method: 'greet',
+        params: { name: 'World' }
+      });
+      alert(result.message);
+    }
+  </script>
+</body>
+</html>
 ```
 
-## Features
+## Implemented Features
 
-### Core
-- **Window Management** - Create, customize, and control application windows
-- **IPC System** - Type-safe communication between main and renderer processes
-- **Preload Scripts** - Secure context bridge for exposing APIs
+### Window Management
+- Create and manage multiple windows
+- Window properties: size, position, title, resizable, decorations
+- Window state: minimize, maximize, fullscreen, show/hide
+- Window events: close, resize, move, focus/blur
+- Parent/child window relationships
 
-### Native APIs
-- **Dialog** - Native file open/save dialogs, message boxes
-- **Menu** - Application menus and context menus
-- **Tray** - System tray icons with menus
-- **Notifications** - Desktop notifications
-- **Clipboard** - Read/write system clipboard
-- **Shell** - Open URLs, files, folders with system apps
-- **Global Shortcuts** - System-wide keyboard shortcuts
+### IPC System
+- Type-safe IPC with Zod schema validation
+- `app.handle()` for registering handlers
+- `window.__bunlet.invoke()` for renderer-to-main calls
+- `window.__bunlet.on()` for event subscriptions
 
-### Developer Experience
-- **Hot Reload** - Instant updates during development
-- **DevTools** - Built-in Chrome DevTools integration
-- **TypeScript** - First-class TypeScript support
-- **Source Maps** - Debug your original code
+### Native Dialogs
+- Open file/folder dialogs with filters
+- Save file dialogs
+- Message boxes (info, warning, error, question)
 
-### Packaging
-- **Cross-Platform** - Build for Windows, macOS, and Linux
-- **Installers** - DMG, MSI, NSIS, AppImage, deb, rpm
-- **Code Signing** - Sign for macOS and Windows
-- **Auto-Updates** - Built-in update mechanism
+### Menu System
+- Application menus
+- Context menus
+- Menu items with click handlers, accelerators, checkboxes, radio buttons
 
-## WebView Modes
+### System Tray
+- Tray icons with tooltips
+- Tray context menus
+- Click/double-click events
 
-Bunlet supports two WebView backends:
+### Notifications
+- Desktop notifications with title and body
+- Notification click events
+- Action buttons (platform-dependent)
 
-### System WebView (Default)
-Uses the operating system's native WebView:
-- **Windows**: WebView2 (Edge/Chromium)
-- **macOS**: WKWebView (Safari/WebKit)
-- **Linux**: WebKitGTK
+### Clipboard
+- Read/write text
+- Read/write HTML
+- Read/write images
+- Clear clipboard
 
-**Pros**: Small installers (20-40MB), uses familiar browser engine
-**Cons**: Rendering may vary slightly across platforms
+### Global Shortcuts
+- Register system-wide keyboard shortcuts
+- Unregister individual or all shortcuts
 
-### CEF Mode (Optional)
-Bundles Chromium Embedded Framework:
+### Shell Integration
+- Open files with default application
+- Open URLs in browser
+- Show files in file manager
+- Beep sound
 
+### File System Watching
+- Watch files and directories for changes
+- Recursive watching support
+- Change event types: create, modify, delete, rename
+
+### Power Monitor
+- Battery status and percentage
+- AC/battery power state
+- System idle time detection
+- Suspend/resume events
+- Lock/unlock screen events
+
+### Navigation API
+- WebView navigation: back, forward, reload
+- Can go back/forward state
+
+## Examples
+
+The `examples/` directory contains working demo applications:
+
+| Example | Description |
+|---------|-------------|
+| **hello-world** | Basic window with HTML |
+| **notes-app** | Full-featured notes application |
+| **multi-window** | Multiple windows with settings |
+| **tray-app** | System tray with notifications |
+| **file-browser** | File dialogs and file watching |
+| **power-monitor** | Battery and power events |
+| **clipboard-manager** | Clipboard history with tray |
+
+Run any example:
 ```bash
-bun add @bunlet/cef
+cd examples/<example-name>
+bun run main.ts
 ```
 
-```typescript
-// bunlet.config.ts
-import { defineConfig } from 'bunlet/config';
+## Project Structure
 
-export default defineConfig({
-  webview: {
-    engine: 'cef',
-  },
-});
+```
+bunlet/
+├── packages/
+│   ├── bunlet/              # TypeScript API layer
+│   │   └── src/
+│   │       ├── app.ts       # Application lifecycle
+│   │       ├── browser-window.ts
+│   │       ├── dialog.ts
+│   │       ├── menu.ts
+│   │       ├── tray.ts
+│   │       ├── notification.ts
+│   │       ├── clipboard.ts
+│   │       ├── global-shortcut.ts
+│   │       ├── shell.ts
+│   │       ├── file-watcher.ts
+│   │       └── power-monitor.ts
+│   │
+│   ├── bunlet-native/       # Rust NAPI bindings
+│   │   └── src/
+│   │       ├── lib.rs       # Core runtime & window management
+│   │       ├── window.rs    # Window options
+│   │       ├── dialog.rs    # Native dialogs
+│   │       ├── menu.rs      # Menu system
+│   │       ├── tray.rs      # System tray
+│   │       ├── notification.rs
+│   │       ├── clipboard.rs
+│   │       ├── global_shortcut.rs
+│   │       ├── shell.rs
+│   │       ├── file_watcher.rs
+│   │       ├── power_monitor.rs
+│   │       └── screen.rs    # Display info (Linux limited)
+│   │
+│   └── bunlet-cli/          # CLI tool (WIP)
+│
+├── examples/                # Demo applications
+└── documentation/           # Documentation
 ```
 
-**Pros**: Dedicated backend path, consistent API surface for CEF runtime
-**Cons**: Experimental scaffold (renderer wiring in progress), larger installers (100MB+)
+## Architecture
 
-## CLI Commands
-
-```bash
-bunlet create <app-name>   # Create new project
-bunlet dev                 # Start dev server with HMR
-bunlet build               # Build for production
-bunlet package             # Create distributable installers
+```
+┌─────────────────────────────────────────────────────┐
+│                   Your Application                   │
+│                    (TypeScript)                      │
+├─────────────────────────────────────────────────────┤
+│                      bunlet                          │
+│              (TypeScript API Layer)                  │
+├─────────────────────────────────────────────────────┤
+│                   bunlet-native                      │
+│                (Rust + NAPI Bindings)                │
+├──────────────────────┬──────────────────────────────┤
+│         TAO          │           WRY                 │
+│  (Window Management) │    (WebView Rendering)       │
+├──────────────────────┴──────────────────────────────┤
+│              Operating System                        │
+│     Windows (WebView2) / macOS (WKWebView) /        │
+│              Linux (WebKitGTK)                       │
+└─────────────────────────────────────────────────────┘
 ```
 
-See [CLI Documentation](./documentation/docs/cli/overview.md) for all options.
+## Known Limitations
 
-## Configuration
+### Linux
+- **Screen API**: Display enumeration causes GTK/D-Bus conflicts with TAO's event loop. Window centering is affected.
+- **WebView**: Requires WebKitGTK to be installed (`libwebkit2gtk-4.1-dev` on Ubuntu/Debian)
 
-```typescript
-// bunlet.config.ts
-import { defineConfig } from 'bunlet/config';
-
-export default defineConfig({
-  appId: 'com.example.myapp',
-  productName: 'My App',
-  version: '1.0.0',
-
-  main: './src/main.ts',
-  preload: './src/preload.ts',
-  renderer: {
-    entry: './src/renderer/index.html',
-  },
-
-  webview: {
-    engine: 'system', // or 'cef'
-  },
-
-  mac: {
-    icon: './resources/icon.icns',
-    hardenedRuntime: true,
-  },
-
-  win: {
-    icon: './resources/icon.ico',
-  },
-
-  linux: {
-    icon: './resources/icons',
-    category: 'Development',
-  },
-
-  updater: {
-    provider: 'github',
-    owner: 'your-org',
-    repo: 'your-app',
-  },
-});
-```
-
-## Size Optimization
-
-Bunlet provides multiple strategies to minimize installer size:
-
-| Strategy | Impact | Effort |
-|----------|--------|--------|
-| Use System WebView | -60MB | Default |
-| Enable minification | -10-30% | `bunlet build --minify` |
-| Strip debug symbols | -5-15% | `bunlet build --strip-symbols` |
-| Bytecode compilation | -10% | `bunlet build --bytecode` |
-| Compress installer | -30-50% | `--compression lzma` |
-| Audit dependencies | Varies | Manual review |
-
-**Target sizes:**
-- Standard build: **25-35MB**
-- Aggressive optimization: **15-20MB**
-
-See the documentation for details.
-
-## Documentation
-
-Full documentation is available in the [`documentation/`](./documentation) directory.
-
-- [Getting Started](./documentation/docs/getting-started/installation.md)
-- [Guides](./documentation/docs/guides/)
-- [API Reference](./documentation/docs/api/)
-- [CLI Reference](./documentation/docs/cli/)
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for the development timeline.
-
-**Current Status**: Active Development
-
-| Phase | Status |
-|-------|--------|
-| Core Foundation | In Progress |
-| Native APIs | Planned |
-| Developer Experience | Planned |
-| Packaging | Planned |
-| Distribution | Planned |
-| CEF Mode | Scaffolded (Experimental) |
+### General
+- `webContents.send()` (main-to-renderer push) not yet implemented - use IPC polling instead
+- Session/Cookie management not yet implemented
+- Preload scripts with context isolation not yet implemented
 
 ## Requirements
 
 - **Bun** 1.0 or later
+- **Rust** (for building bunlet-native)
 - **Operating Systems**:
-  - Windows 10/11 (x64)
+  - Windows 10/11 (x64) - WebView2 runtime
   - macOS 10.15+ (x64, ARM64)
-  - Linux (x64, ARM64) - requires WebKitGTK
+  - Linux (x64) - WebKitGTK 4.1
+
+### Linux Dependencies
+
+```bash
+# Ubuntu/Debian
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+
+# Fedora
+sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel
+
+# Arch
+sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3
+```
+
+## Development
+
+```bash
+# Build native bindings
+cd packages/bunlet-native
+cargo build
+
+# Build TypeScript package
+cd packages/bunlet
+bun run build
+
+# Run tests
+bun test
+```
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## License
 
@@ -260,4 +306,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Built with [Bun](https://bun.sh)** - the fast all-in-one JavaScript runtime.
+**Built with [Bun](https://bun.sh) and [Rust](https://www.rust-lang.org/)**

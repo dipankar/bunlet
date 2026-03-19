@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clipboard Manager</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      padding: 10px 15px;
+      background: white;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .toolbar button {
+      padding: 8px 15px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: #f0f0f0;
+    }
+
+    .toolbar button.danger {
+      color: #dc3545;
+      border-color: #dc3545;
+    }
+
+    .toolbar button.danger:hover {
+      background: #dc3545;
+      color: white;
+    }
+
+    .history {
+      padding: 10px;
+      height: calc(100vh - 150px);
+      overflow-y: auto;
+    }
+
+    .history-item {
+      background: white;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #e0e0e0;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+
+    .history-item:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .history-content {
+      padding: 12px 15px;
+      cursor: pointer;
+    }
+
+    .history-text {
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 100px;
+      overflow: hidden;
+      line-height: 1.4;
+    }
+
+    .history-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 15px;
+      background: #f9f9f9;
+      border-top: 1px solid #eee;
+      font-size: 11px;
+      color: #888;
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .history-actions button {
+      padding: 4px 10px;
+      border: none;
+      background: #eee;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .history-actions button:hover {
+      background: #ddd;
+    }
+
+    .history-actions button.copy {
+      background: #667eea;
+      color: white;
+    }
+
+    .history-actions button.copy:hover {
+      background: #5a6fd6;
+    }
+
+    .history-actions button.delete {
+      color: #dc3545;
+    }
+
+    .history-actions button.delete:hover {
+      background: #dc3545;
+      color: white;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #888;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .toast.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Clipboard Manager</h1>
+    <p>Press Ctrl+Shift+V to show this window</p>
+  </div>
+
+  <div class="toolbar">
+    <button id="btn-refresh">Refresh</button>
+    <button id="btn-clear-clipboard">Clear Clipboard</button>
+    <button id="btn-clear-history" class="danger">Clear History</button>
+  </div>
+
+  <div class="history" id="history">
+    <div class="empty-state">
+      <div class="icon">&#128203;</div>
+      <p>No clipboard history yet.<br>Copy something to get started.</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied to clipboard!</div>
+
+  <script>
+    const api = window.api;
+    const historyEl = document.getElementById('history');
+    const toast = document.getElementById('toast');
+
+    // Format timestamp
+    function formatTime(timestamp) {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 60000) return 'Just now';
+      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+      return date.toLocaleDateString();
+    }
+
+    // Truncate text for display
+    function truncate(text, maxLen = 200) {
+      if (text.length <= maxLen) return text;
+      return text.substring(0, maxLen) + '...';
+    }
+
+    // Show toast notification
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2000);
+    }
+
+    // Render history
+    function renderHistory(history) {
+      if (!history || history.length === 0) {
+        historyEl.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">&#128203;</div>
+            <p>No clipboard history yet.<br>Copy something to get started.</p>
+          </div>
+        `;
+        return;
+      }
+
+      historyEl.innerHTML = history.map((item, index) => `
+        <div class="history-item" data-index="${index}">
+          <div class="history-content" title="Click to copy">
+            <div class="history-text">${escapeHtml(truncate(item.text))}</div>
+          </div>
+          <div class="history-meta">
+            <span>${formatTime(item.timestamp)} &bull; ${item.text.length} chars</span>
+            <div class="history-actions">
+              <button class="copy">Copy</button>
+              <button class="delete">Remove</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      // Add event listeners
+      historyEl.querySelectorAll('.history-item').forEach(el => {
+        const index = parseInt(el.dataset.index);
+        const text = history[index].text;
+
+        el.querySelector('.history-content').addEventListener('click', () => {
+          api.copyToClipboard(text);
+          showToast('Copied to clipboard!');
+        });
+
+        el.querySelector('.copy').addEventListener('click', (e) => {
+          e.stopPropagation();
+          api.copyToClipboard(text);
+          showToast('Copied to clipboard!');
+        });
+
+        el.querySelector('.delete').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const result = await api.removeItem(index);
+          renderHistory(result.history);
+        });
+      });
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Event listeners
+    document.getElementById('btn-refresh').addEventListener('click', async () => {
+      const history = await api.getHistory();
+      renderHistory(history);
+    });
+
+    document.getElementById('btn-clear-clipboard').addEventListener('click', async () => {
+      await api.clearClipboard();
+      showToast('Clipboard cleared');
+    });
+
+    document.getElementById('btn-clear-history').addEventListener('click', async () => {
+      await api.clearHistory();
+      renderHistory([]);
+      showToast('History cleared');
+    });
+
+    // Listen for updates
+    api.onHistoryUpdated((history) => {
+      renderHistory(history);
+    });
+
+    // Initial load
+    api.getHistory().then(renderHistory);
+  </script>
+</body>
+</html>

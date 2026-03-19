@@ -1,0 +1,15 @@
+{
+  "name": "power-monitor-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Power monitor demo for bunlet - demonstrates battery status, power events, and system idle detection",
+  "main": "main.ts",
+  "scripts": {
+    "start": "bun run main.ts",
+    "dev": "bun run main.ts"
+  },
+  "dependencies": {
+    "bunlet": "workspace:*"
+  }
+}

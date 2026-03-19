@@ -1,0 +1,93 @@
+site_name: Bunlet
+site_description: Build desktop apps with Bun
+site_url: https://bunlet.dev
+repo_url: https://github.com/bunlet/bunlet
+repo_name: bunlet/bunlet
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - search.suggest
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/bunlet/bunlet
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Project Structure: getting-started/project-structure.md
+  - Guides:
+    - Windows: guides/windows.md
+    - IPC Communication: guides/ipc.md
+    - Menus: guides/menus.md
+    - Dialogs: guides/dialogs.md
+    - Notifications: guides/notifications.md
+    - System Tray: guides/tray.md
+    - Clipboard: guides/clipboard.md
+    - Shell: guides/shell.md
+    - Global Shortcuts: guides/shortcuts.md
+    - Auto Updater: guides/auto-updater.md
+  - API Reference:
+    - app: api/app.md
+    - BrowserWindow: api/browser-window.md
+    - WebContents: api/web-contents.md
+    - Menu: api/menu.md
+    - dialog: api/dialog.md
+    - Notification: api/notification.md
+    - Tray: api/tray.md
+    - clipboard: api/clipboard.md
+    - shell: api/shell.md
+    - globalShortcut: api/global-shortcut.md
+    - autoUpdater: api/auto-updater.md
+  - CLI:
+    - Overview: cli/overview.md
+    - create: cli/create.md
+    - dev: cli/dev.md
+    - build: cli/build.md
+    - package: cli/package.md

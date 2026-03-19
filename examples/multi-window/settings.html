@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #333333;
+      --input-bg: #f5f5f5;
+      --border-color: #e0e0e0;
+      --primary-color: #007bff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 25px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: var(--input-bg);
+      font-size: 14px;
+    }
+
+    input[type="range"] {
+      padding: 0;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--border-color);
+      outline: none;
+      border-radius: 3px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--primary-color);
+      cursor: pointer;
+    }
+
+    .range-value {
+      text-align: center;
+      margin-top: 8px;
+      font-size: 14px;
+      color: var(--text-color);
+      opacity: 0.8;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      color: white;
+    }
+
+    .btn-secondary {
+      background-color: var(--border-color);
+      color: var(--text-color);
+    }
+  </style>
+</head>
+<body>
+  <h1>Settings</h1>
+
+  <form id="settings-form">
+    <div class="form-group">
+      <label for="theme">Theme</label>
+      <select id="theme" name="theme">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="fontSize">Font Size</label>
+      <input type="range" id="fontSize" name="fontSize" min="10" max="24" value="14">
+      <div class="range-value"><span id="font-size-value">14</span>px</div>
+    </div>
+
+    <div class="buttons">
+      <button type="button" class="btn-secondary" id="cancel-btn">Cancel</button>
+      <button type="submit" class="btn-primary">Save</button>
+    </div>
+  </form>
+
+  <script>
+    // IPC helper
+    async function invoke(method, params = {}) {
+      return window.__bunlet.invoke({ method, params });
+    }
+
+    const form = document.getElementById('settings-form');
+    const themeSelect = document.getElementById('theme');
+    const fontSizeInput = document.getElementById('fontSize');
+    const fontSizeValue = document.getElementById('font-size-value');
+
+    // Update font size display
+    fontSizeInput.addEventListener('input', () => {
+      fontSizeValue.textContent = fontSizeInput.value;
+    });
+
+    // Load current settings
+    async function loadSettings() {
+      try {
+        const settings = await invoke('get-settings');
+        themeSelect.value = settings.theme;
+        fontSizeInput.value = settings.fontSize;
+        fontSizeValue.textContent = settings.fontSize;
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+      }
+    }
+
+    // Save settings
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await invoke('save-settings', {
+          theme: themeSelect.value,
+          fontSize: parseInt(fontSizeInput.value, 10),
+        });
+        invoke('close-settings');
+      } catch (e) {
+        console.error('Failed to save settings:', e);
+      }
+    });
+
+    // Cancel button
+    document.getElementById('cancel-btn').addEventListener('click', () => {
+      invoke('close-settings');
+    });
+
+    // Initialize
+    loadSettings();
+  </script>
+</body>
+</html>

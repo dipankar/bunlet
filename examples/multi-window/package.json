@@ -1,0 +1,15 @@
+{
+  "name": "multi-window-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-window demo for bunlet - demonstrates parent/child windows, modals, and Screen API",
+  "main": "main.ts",
+  "scripts": {
+    "start": "bun run main.ts",
+    "dev": "bun run main.ts"
+  },
+  "dependencies": {
+    "bunlet": "workspace:*"
+  }
+}

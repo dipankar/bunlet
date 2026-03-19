@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Power Monitor</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      color: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+    }
+
+    .card h2 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.8;
+      margin-bottom: 15px;
+    }
+
+    .battery-display {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .battery-icon {
+      width: 80px;
+      height: 40px;
+      border: 3px solid white;
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .battery-icon::after {
+      content: '';
+      position: absolute;
+      right: -8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 16px;
+      background: white;
+      border-radius: 0 3px 3px 0;
+    }
+
+    .battery-level {
+      height: 100%;
+      background: #4ade80;
+      transition: width 0.3s;
+    }
+
+    .battery-level.low {
+      background: #f59e0b;
+    }
+
+    .battery-level.critical {
+      background: #ef4444;
+    }
+
+    .battery-info {
+      flex: 1;
+    }
+
+    .battery-percent {
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .battery-status {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+
+    .event-log {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .event-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .event-item:last-child {
+      border-bottom: none;
+    }
+
+    .event-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 12px;
+      font-size: 16px;
+    }
+
+    .event-message {
+      flex: 1;
+      font-size: 14px;
+    }
+
+    .event-time {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    .empty-log {
+      text-align: center;
+      padding: 20px;
+      opacity: 0.6;
+      font-size: 14px;
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .status-dot.active { background: #4ade80; }
+    .status-dot.idle { background: #f59e0b; }
+    .status-dot.locked { background: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>Power Monitor</h1>
+
+  <div class="card">
+    <h2>Battery</h2>
+    <div class="battery-display">
+      <div class="battery-icon">
+        <div class="battery-level" id="battery-level" style="width: 100%"></div>
+      </div>
+      <div class="battery-info">
+        <div class="battery-percent" id="battery-percent">100%</div>
+        <div class="battery-status" id="battery-status">On AC Power</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>System Status</h2>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-value" id="idle-time">0s</div>
+        <div class="stat-label">Idle Time</div>
+      </div>
+      <div class="stat-item">
+        <div id="idle-state">
+          <span class="status-indicator">
+            <span class="status-dot active"></span>
+            <span>Active</span>
+          </span>
+        </div>
+        <div class="stat-label">System State</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="time-remaining">-</div>
+        <div class="stat-label">Time Remaining</div>
+      </div>
+      <div class="stat-item">
+        <div id="thermal-state">
+          <span class="status-indicator">
+            <span class="status-dot active"></span>
+            <span>Nominal</span>
+          </span>
+        </div>
+        <div class="stat-label">Thermal State</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Event Log</h2>
+    <div class="event-log" id="event-log">
+      <div class="empty-log">No events yet. Power events will appear here.</div>
+    </div>
+  </div>
+
+  <script>
+    const api = window.api;
+    const events = [];
+
+    // Elements
+    const batteryLevel = document.getElementById('battery-level');
+    const batteryPercent = document.getElementById('battery-percent');
+    const batteryStatus = document.getElementById('battery-status');
+    const idleTime = document.getElementById('idle-time');
+    const idleState = document.getElementById('idle-state');
+    const timeRemaining = document.getElementById('time-remaining');
+    const thermalState = document.getElementById('thermal-state');
+    const eventLog = document.getElementById('event-log');
+
+    // Event icons
+    const eventIcons = {
+      'on-ac': '&#128268;',
+      'on-battery': '&#128267;',
+      'suspend': '&#128564;',
+      'resume': '&#9728;',
+      'lock-screen': '&#128274;',
+      'unlock-screen': '&#128275;',
+    };
+
+    // Format time
+    function formatTime(seconds) {
+      if (seconds < 0) return '-';
+      if (seconds < 60) return seconds + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+      const hours = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      return hours + 'h ' + mins + 'm';
+    }
+
+    // Update battery display
+    async function updateBattery() {
+      const info = await api.getBatteryInfo();
+
+      batteryLevel.style.width = info.level + '%';
+      batteryPercent.textContent = Math.round(info.level) + '%';
+
+      // Update level color
+      batteryLevel.classList.remove('low', 'critical');
+      if (info.level <= 10) {
+        batteryLevel.classList.add('critical');
+      } else if (info.level <= 20) {
+        batteryLevel.classList.add('low');
+      }
+
+      // Update status
+      if (info.charging) {
+        batteryStatus.textContent = 'Charging';
+      } else if (info.onAC) {
+        batteryStatus.textContent = 'On AC Power';
+      } else {
+        batteryStatus.textContent = 'On Battery';
+      }
+
+      // Time remaining
+      timeRemaining.textContent = formatTime(info.timeRemaining);
+    }
+
+    // Update system status
+    async function updateStatus() {
+      const state = await api.getPowerState();
+
+      // Idle time
+      idleTime.textContent = formatTime(state.idleTime);
+
+      // Idle state
+      const stateClass = state.idleState.state === 'active' ? 'active' :
+                         state.idleState.state === 'idle' ? 'idle' : 'locked';
+      idleState.innerHTML = `
+        <span class="status-indicator">
+          <span class="status-dot ${stateClass}"></span>
+          <span>${state.idleState.state.charAt(0).toUpperCase() + state.idleState.state.slice(1)}</span>
+        </span>
+      `;
+
+      // Thermal state
+      const thermalClass = state.thermalState === 'nominal' ? 'active' :
+                           state.thermalState === 'fair' ? 'idle' : 'locked';
+      thermalState.innerHTML = `
+        <span class="status-indicator">
+          <span class="status-dot ${thermalClass}"></span>
+          <span>${state.thermalState.charAt(0).toUpperCase() + state.thermalState.slice(1)}</span>
+        </span>
+      `;
+    }
+
+    // Add event to log
+    function addEvent(event) {
+      events.unshift(event);
+      if (events.length > 50) events.pop();
+
+      eventLog.innerHTML = events.map(e => {
+        const time = new Date(e.timestamp).toLocaleTimeString();
+        const icon = eventIcons[e.type] || '&#9889;';
+        return `
+          <div class="event-item">
+            <span class="event-icon">${icon}</span>
+            <span class="event-message">${e.message}</span>
+            <span class="event-time">${time}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Listen for power events
+    api.onPowerEvent((event) => {
+      addEvent(event);
+      updateBattery();
+      updateStatus();
+    });
+
+    // Initial update and polling
+    updateBattery();
+    updateStatus();
+
+    setInterval(() => {
+      updateBattery();
+      updateStatus();
+    }, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "@bunlet/cef",
+  "version": "0.1.0",
+  "description": "CEF backend bindings for Bunlet (experimental)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bunlet/bunlet"
+  },
+  "scripts": {
+    "build": "cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release && bun run copy-artifact",
+    "build:debug": "cargo build --manifest-path ../bunlet-cef-native/Cargo.toml && bun run copy-artifact:debug",
+    "copy-artifact": "bun ./scripts/copy-artifact.js release",
+    "copy-artifact:debug": "bun ./scripts/copy-artifact.js debug",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@bunlet/native": "workspace:*"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "scripts",
+    "*.node"
+  ]
+}

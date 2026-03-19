@@ -1,0 +1,15 @@
+{
+  "name": "clipboard-manager-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clipboard manager demo for bunlet - demonstrates clipboard API, global shortcuts, and tray integration",
+  "main": "main.ts",
+  "scripts": {
+    "start": "bun run main.ts",
+    "dev": "bun run main.ts"
+  },
+  "dependencies": {
+    "bunlet": "workspace:*"
+  }
+}

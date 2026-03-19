@@ -1,0 +1,21 @@
+{
+  "name": "bunlet-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "build:native": "cd packages/bunlet-native && bun run build",
+    "dev": "bun run --filter bunlet-cli dev",
+    "test": "bun test",
+    "clean": "rm -rf packages/*/dist packages/*/*.node"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.3.0"
+  }
+}

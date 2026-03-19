@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Window Demo</title>
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #333333;
+      --card-bg: #f5f5f5;
+      --border-color: #e0e0e0;
+      --primary-color: #007bff;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #1a1a2e;
+      --text-color: #eaeaea;
+      --card-bg: #16213e;
+      --border-color: #0f3460;
+      --primary-color: #4da3ff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border-color);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    .display-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+    }
+
+    .display-item {
+      background-color: var(--bg-color);
+      padding: 15px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .display-item.primary {
+      border-color: var(--primary-color);
+      border-width: 2px;
+    }
+
+    .display-item h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .display-item p {
+      font-size: 12px;
+      color: var(--text-color);
+      opacity: 0.8;
+      margin-bottom: 5px;
+    }
+
+    .settings-info {
+      display: flex;
+      gap: 20px;
+    }
+
+    .settings-info div {
+      flex: 1;
+    }
+
+    .settings-info label {
+      font-size: 12px;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+
+    .settings-info p {
+      font-size: 18px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Multi-Window Demo</h1>
+    <button id="settings-btn">Settings</button>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Current Settings</h2>
+      <div class="settings-info">
+        <div>
+          <label>Theme</label>
+          <p id="current-theme">light</p>
+        </div>
+        <div>
+          <label>Font Size</label>
+          <p id="current-font-size">14px</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Connected Displays</h2>
+      <div id="displays" class="display-grid">
+        <p>Loading displays...</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // IPC helper using bunlet's injected __bunlet object
+    async function invoke(method, params = {}) {
+      return window.__bunlet.invoke({ method, params });
+    }
+
+    // Apply settings
+    function applySettings(settings) {
+      document.body.setAttribute('data-theme', settings.theme);
+      document.body.style.fontSize = settings.fontSize + 'px';
+      document.getElementById('current-theme').textContent = settings.theme;
+      document.getElementById('current-font-size').textContent = settings.fontSize + 'px';
+    }
+
+    // Load and display settings
+    async function loadSettings() {
+      try {
+        const settings = await invoke('get-settings');
+        applySettings(settings);
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+      }
+    }
+
+    // Load and display connected displays
+    // Note: Screen API is currently disabled on Linux due to GTK/D-Bus conflict
+    async function loadDisplays() {
+      const container = document.getElementById('displays');
+      container.innerHTML = `
+        <div class="display-item">
+          <h3>Display Information</h3>
+          <p>Screen API is currently unavailable on Linux.</p>
+          <p>This is a known limitation that will be fixed in a future release.</p>
+        </div>
+      `;
+    }
+
+    // Listen for settings changes from main process
+    window.__bunlet.on('settings-changed', (_, settings) => {
+      applySettings(settings);
+    });
+
+    // Settings button
+    document.getElementById('settings-btn').addEventListener('click', () => {
+      invoke('open-settings');
+    });
+
+    // Initialize
+    loadSettings();
+    loadDisplays();
+  </script>
+</body>
+</html>

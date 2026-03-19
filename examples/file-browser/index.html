@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Browser</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .toolbar button {
+      padding: 8px 12px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .toolbar button:hover:not(:disabled) {
+      background: #f0f0f0;
+    }
+
+    .toolbar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .path-bar {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 4px;
+      background: #fff;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .content {
+      padding: 10px;
+    }
+
+    .file-list {
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      overflow: hidden;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 15px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .file-item:last-child {
+      border-bottom: none;
+    }
+
+    .file-item:hover {
+      background: #f8f8f8;
+    }
+
+    .file-item.hidden {
+      opacity: 0.6;
+    }
+
+    .file-icon {
+      width: 32px;
+      height: 32px;
+      margin-right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .file-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-name {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-meta {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .file-size {
+      width: 80px;
+      text-align: right;
+      color: #666;
+      font-size: 12px;
+    }
+
+    .file-actions {
+      display: flex;
+      gap: 5px;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+
+    .file-item:hover .file-actions {
+      opacity: 1;
+    }
+
+    .file-actions button {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .file-actions button:hover {
+      background: #e8e8e8;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #888;
+    }
+
+    .error {
+      background: #fee;
+      color: #c00;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .status-bar {
+      padding: 8px 15px;
+      background: #fff;
+      border-top: 1px solid #e0e0e0;
+      font-size: 12px;
+      color: #666;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="btn-back" title="Back">&#8592;</button>
+    <button id="btn-forward" title="Forward">&#8594;</button>
+    <button id="btn-up" title="Up">&#8593;</button>
+    <button id="btn-refresh" title="Refresh">&#8635;</button>
+    <input type="text" class="path-bar" id="path-bar" readonly>
+    <button id="btn-open-folder">Open Folder</button>
+  </div>
+
+  <div class="content">
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="file-list" class="file-list"></div>
+  </div>
+
+  <div class="status-bar" id="status-bar">Loading...</div>
+
+  <script>
+    const api = window.api;
+    let showHidden = false;
+
+    // Elements
+    const btnBack = document.getElementById('btn-back');
+    const btnForward = document.getElementById('btn-forward');
+    const btnUp = document.getElementById('btn-up');
+    const btnRefresh = document.getElementById('btn-refresh');
+    const btnOpenFolder = document.getElementById('btn-open-folder');
+    const pathBar = document.getElementById('path-bar');
+    const fileList = document.getElementById('file-list');
+    const errorDiv = document.getElementById('error');
+    const statusBar = document.getElementById('status-bar');
+
+    // Format file size
+    function formatSize(bytes) {
+      if (bytes === 0) return '-';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+    }
+
+    // Render directory contents
+    function render(data) {
+      if (!data) return;
+
+      // Update path bar
+      pathBar.value = data.path;
+
+      // Update navigation buttons
+      btnBack.disabled = !data.canGoBack;
+      btnForward.disabled = !data.canGoForward;
+
+      // Show error if any
+      if (data.error) {
+        errorDiv.textContent = data.error;
+        errorDiv.style.display = 'block';
+      } else {
+        errorDiv.style.display = 'none';
+      }
+
+      // Filter hidden files
+      const items = showHidden ? data.items : data.items.filter(item => !item.hidden);
+
+      // Update status
+      const dirCount = items.filter(i => i.isDirectory).length;
+      const fileCount = items.filter(i => i.isFile).length;
+      statusBar.textContent = `${dirCount} folders, ${fileCount} files`;
+
+      // Render items
+      if (items.length === 0) {
+        fileList.innerHTML = '<div class="empty-state">This folder is empty</div>';
+        return;
+      }
+
+      fileList.innerHTML = items.map(item => `
+        <div class="file-item ${item.hidden ? 'hidden' : ''}" data-path="${item.path}" data-is-dir="${item.isDirectory}">
+          <div class="file-icon">${item.isDirectory ? '&#128193;' : '&#128196;'}</div>
+          <div class="file-info">
+            <div class="file-name">${item.name}</div>
+            <div class="file-meta">${item.modified ? new Date(item.modified).toLocaleDateString() : ''}</div>
+          </div>
+          <div class="file-size">${item.isFile ? formatSize(item.size) : ''}</div>
+          <div class="file-actions">
+            <button class="btn-show" title="Show in folder">&#128269;</button>
+            ${item.isFile ? '<button class="btn-open" title="Open">&#9654;</button>' : ''}
+          </div>
+        </div>
+      `).join('');
+
+      // Add click handlers
+      fileList.querySelectorAll('.file-item').forEach(el => {
+        const itemPath = el.dataset.path;
+        const isDir = el.dataset.isDir === 'true';
+
+        // Double-click to open
+        el.addEventListener('dblclick', async () => {
+          if (isDir) {
+            const result = await api.navigateTo(itemPath);
+            render(result);
+          } else {
+            api.openFile(itemPath);
+          }
+        });
+
+        // Show in folder button
+        el.querySelector('.btn-show').addEventListener('click', (e) => {
+          e.stopPropagation();
+          api.showInFolder(itemPath);
+        });
+
+        // Open button (files only)
+        const openBtn = el.querySelector('.btn-open');
+        if (openBtn) {
+          openBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            api.openFile(itemPath);
+          });
+        }
+      });
+    }
+
+    // Navigation
+    btnBack.addEventListener('click', async () => {
+      const result = await api.navigateBack();
+      if (result) render(result);
+    });
+
+    btnForward.addEventListener('click', async () => {
+      const result = await api.navigateForward();
+      if (result) render(result);
+    });
+
+    btnUp.addEventListener('click', async () => {
+      const result = await api.navigateUp();
+      if (result) render(result);
+    });
+
+    btnRefresh.addEventListener('click', async () => {
+      const result = await api.getDirectory();
+      render(result);
+    });
+
+    btnOpenFolder.addEventListener('click', async () => {
+      const result = await api.openFolderDialog();
+      if (result) render(result);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', async (e) => {
+      if (e.key === 'Backspace' && !e.target.matches('input')) {
+        const result = await api.navigateBack();
+        if (result) render(result);
+      }
+    });
+
+    // Listen for file system changes
+    api.onDirectoryChanged((event) => {
+      console.log('Directory changed:', event);
+      // Refresh the view
+      api.getDirectory().then(render);
+    });
+
+    // Initial load
+    api.getDirectory().then(render);
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "name": "bunlet",
+  "version": "0.1.0",
+  "description": "Build cross-platform desktop apps with Bun and WebView",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer.d.ts",
+      "import": "./dist/renderer.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/renderer.ts ./src/config.ts --outdir ./dist --target bun --external @bunlet/native --external @bunlet/cef && bun run build:types",
+    "build:types": "tsc --emitDeclarationOnly --outDir dist",
+    "dev": "bun run build --watch",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@bunlet/native": "workspace:*",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0",
+    "@bunlet/cef": "*"
+  },
+  "peerDependenciesMeta": {
+    "@bunlet/cef": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "bun",
+    "desktop",
+    "electron",
+    "tauri",
+    "webview",
+    "gui",
+    "cross-platform"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bunlet/bunlet"
+  }
+}

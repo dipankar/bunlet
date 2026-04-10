@@ -4,7 +4,7 @@
  * Provides cross-platform application and context menus.
  */
 
-import native from './native/bindings';
+import { native } from './runtime';
 import type { BrowserWindow } from './browser-window';
 
 /** Callback ID counter */

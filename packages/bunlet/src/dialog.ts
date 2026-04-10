@@ -4,7 +4,7 @@
  * Provides cross-platform file dialogs and message boxes.
  */
 
-import native from './native/bindings';
+import { native } from './runtime';
 import type { BrowserWindow } from './browser-window';
 
 /**

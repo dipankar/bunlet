@@ -4,7 +4,7 @@
  * Provides cross-platform global keyboard shortcuts.
  */
 
-import native from './native/bindings';
+import { native } from './runtime';
 
 /** Map of accelerator -> callback */
 const callbacks = new Map<string, () => void>();

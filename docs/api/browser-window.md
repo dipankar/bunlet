@@ -65,6 +65,8 @@ interface BrowserWindowOptions {
 
 interface WebPreferences {
   preload?: string;            // Path to preload script
+  partition?: string;          // Session partition name
+  session?: Session;           // Explicit session object
   devTools?: boolean;          // Default: true
   contextIsolation?: boolean;  // Default: true
   sandbox?: boolean;           // Default: true
@@ -96,6 +98,24 @@ Returns window with the given ID.
 
 ```typescript
 BrowserWindow.fromId(id: number): BrowserWindow | null
+```
+
+## Instance Properties
+
+### `win.session`
+
+The session associated with this window.
+
+```typescript
+const projectSession = Session.fromPartition('project-a');
+
+const win = new BrowserWindow({
+  webPreferences: {
+    session: projectSession,
+  },
+});
+
+console.log(win.session.partition);
 ```
 
 ## Instance Methods

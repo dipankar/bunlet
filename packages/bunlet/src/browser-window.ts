@@ -3,16 +3,24 @@
  */
 
 import { EventEmitter } from 'events';
-import native from './native/bindings';
 import type { BrowserWindowOptions, Rectangle, BunletEvent } from './types';
+import type { Session } from './session';
 import { screen } from './screen';
 import * as path from 'path';
 import * as fs from 'fs';
-
-/**
- * Global registry of windows by ID
- */
-export const windowRegistry = new Map<number, BrowserWindow>();
+import { assertRuntimeCapability, native } from './runtime';
+import { windowManager, windowRegistry } from './windows/manager';
+import {
+  applyNativeWindowEvent,
+  createCloseEvent,
+  type NativeWindowEvent,
+} from './windows/events';
+import { BrowserWindowState, WebContentsState } from './windows/state';
+import {
+  attachSessionToWindow,
+  detachSessionFromWindow,
+  resolveSessionForWebPreferences,
+} from './session';
 
 /**
  * DevTools options
@@ -26,17 +34,22 @@ export interface DevToolsOptions {
  * WebContents - Control the web page displayed in a window
  */
 export class WebContents extends EventEmitter {
-  private windowId: number;
+  private readonly windowId: number;
+  private readonly state: WebContentsState;
+  readonly session: Session;
 
-  constructor(windowId: number) {
+  constructor(windowId: number, currentSession: Session, state: WebContentsState) {
     super();
     this.windowId = windowId;
+    this.session = currentSession;
+    this.state = state;
   }
 
   /**
    * Execute JavaScript in the WebView
    */
   async executeJavaScript(code: string): Promise<unknown> {
+    assertRuntimeCapability('executeJavaScript', 'webContents.executeJavaScript()');
     const result = await native.executeJavaScript(this.windowId, code);
     try {
       return JSON.parse(result);
@@ -49,6 +62,7 @@ export class WebContents extends EventEmitter {
    * Open DevTools
    */
   openDevTools(options?: DevToolsOptions): void {
+    assertRuntimeCapability('devtools', 'webContents.openDevTools()');
     try {
       native.openDevtools(this.windowId);
       this.emit('devtools-opened');
@@ -62,6 +76,7 @@ export class WebContents extends EventEmitter {
    * Close DevTools
    */
   closeDevTools(): void {
+    assertRuntimeCapability('devtools', 'webContents.closeDevTools()');
     try {
       native.closeDevtools(this.windowId);
       this.emit('devtools-closed');
@@ -74,6 +89,7 @@ export class WebContents extends EventEmitter {
    * Toggle DevTools
    */
   toggleDevTools(): void {
+    assertRuntimeCapability('devtools', 'webContents.toggleDevTools()');
     try {
       native.toggleDevtools(this.windowId);
     } catch {
@@ -85,6 +101,7 @@ export class WebContents extends EventEmitter {
    * Check if DevTools is opened
    */
   isDevToolsOpened(): boolean {
+    assertRuntimeCapability('devtools', 'webContents.isDevToolsOpened()');
     try {
       return native.isDevtoolsOpen(this.windowId);
     } catch {
@@ -96,6 +113,7 @@ export class WebContents extends EventEmitter {
    * Reload the page
    */
   reload(): void {
+    assertRuntimeCapability('navigation', 'webContents.reload()');
     native.webviewReload(this.windowId);
   }
 
@@ -103,6 +121,7 @@ export class WebContents extends EventEmitter {
    * Stop loading the page
    */
   stop(): void {
+    assertRuntimeCapability('navigation', 'webContents.stop()');
     native.webviewStop(this.windowId);
   }
 
@@ -110,6 +129,7 @@ export class WebContents extends EventEmitter {
    * Navigate back in history
    */
   goBack(): void {
+    assertRuntimeCapability('navigation', 'webContents.goBack()');
     native.webviewGoBack(this.windowId);
   }
 
@@ -117,43 +137,59 @@ export class WebContents extends EventEmitter {
    * Navigate forward in history
    */
   goForward(): void {
+    assertRuntimeCapability('navigation', 'webContents.goForward()');
     native.webviewGoForward(this.windowId);
   }
 
   /**
    * Check if webview can navigate back
-   * Note: This uses a heuristic based on history length
    */
   canGoBack(): boolean {
-    // This is a best-effort implementation since wry doesn't expose canGoBack
-    // The actual state tracking would need to be done via navigation events
-    return true; // Assume can go back, history.back() is safe to call
+    assertRuntimeCapability('navigation', 'webContents.canGoBack()');
+    return this.state.canGoBack();
   }
 
   /**
    * Check if webview can navigate forward
-   * Note: This uses a heuristic based on history state
    */
   canGoForward(): boolean {
-    // Same limitation as canGoBack
-    return true;
+    assertRuntimeCapability('navigation', 'webContents.canGoForward()');
+    return this.state.canGoForward();
   }
 
   /**
    * Get the current URL
    */
   getURL(): string {
-    // Would need to track this via navigation events
-    // For now, return empty string as placeholder
-    return '';
+    assertRuntimeCapability('navigation', 'webContents.getURL()');
+    return this.state.getURL();
   }
 
   /**
    * Get the page title
    */
   getTitle(): string {
-    // Would need to track this via page title change events
-    return '';
+    return this.state.getTitle();
+  }
+
+  recordNavigation(url: string): void {
+    this.state.recordNavigation(url);
+  }
+
+  recordUnknownNavigation(): void {
+    this.state.recordUnknownNavigation();
+  }
+
+  recordHistoryBack(): void {
+    this.state.recordGoBack();
+  }
+
+  recordHistoryForward(): void {
+    this.state.recordGoForward();
+  }
+
+  setTitle(title: string): void {
+    this.state.setTitle(title);
   }
 }
 
@@ -163,12 +199,17 @@ export class WebContents extends EventEmitter {
 export class BrowserWindow extends EventEmitter {
   readonly id: number;
   readonly webContents: WebContents;
+  readonly session: Session;
+  private readonly state: BrowserWindowState;
   private options: BrowserWindowOptions;
-  private destroyed = false;
 
   constructor(options: BrowserWindowOptions = {}) {
     super();
     this.options = options;
+    this.state = new BrowserWindowState(options.title ?? 'Bunlet');
+    if (options.webPreferences?.partition || options.webPreferences?.session) {
+      assertRuntimeCapability('sessionPartitions', 'BrowserWindow webPreferences.session/partition');
+    }
     const preloadScript = this.resolvePreloadScript(options.webPreferences?.preload);
     const openDevtools =
       options.webPreferences?.devTools ?? process.env.BUNLET_OPEN_DEVTOOLS === '1';
@@ -195,11 +236,18 @@ export class BrowserWindow extends EventEmitter {
       modal: options.modal,
     });
 
-    // Create WebContents
-    this.webContents = new WebContents(this.id);
+    this.session = resolveSessionForWebPreferences(options.webPreferences);
+    attachSessionToWindow(this.id, this.session);
 
-    // Register in global registry
-    windowRegistry.set(this.id, this);
+    // Create WebContents
+    this.webContents = new WebContents(
+      this.id,
+      this.session,
+      new WebContentsState(this.state.getTitle())
+    );
+
+    // Register in process window manager
+    windowManager.register(this);
 
     // Note: Auto-centering is disabled because windows are created asynchronously
     // when app.run() is called. Call center() manually after 'ready-to-show' event
@@ -212,27 +260,21 @@ export class BrowserWindow extends EventEmitter {
    * Get all open windows
    */
   static getAllWindows(): BrowserWindow[] {
-    return Array.from(windowRegistry.values());
+    return windowManager.getAll();
   }
 
   /**
    * Get currently focused window
    */
   static getFocusedWindow(): BrowserWindow | null {
-    if (typeof native.getFocusedWindowId === 'function') {
-      const focusedWindowId = native.getFocusedWindowId();
-      if (typeof focusedWindowId === 'number') {
-        return windowRegistry.get(focusedWindowId) ?? null;
-      }
-    }
-    return null;
+    return windowManager.getFocused();
   }
 
   /**
    * Get window by ID
    */
   static fromId(id: number): BrowserWindow | null {
-    return windowRegistry.get(id) ?? null;
+    return windowManager.get(id);
   }
 
   // Content loading
@@ -241,10 +283,8 @@ export class BrowserWindow extends EventEmitter {
    * Load a URL
    */
   async loadURL(url: string): Promise<void> {
-    this.emit('did-start-loading');
     native.loadUrl(this.id, url);
     this.maybeAutoOpenDevTools();
-    this.emit('did-finish-load');
   }
 
   /**
@@ -259,10 +299,8 @@ export class BrowserWindow extends EventEmitter {
       throw new Error(`File not found: ${absolutePath}`);
     }
 
-    this.emit('did-start-loading');
     native.loadFile(this.id, absolutePath);
     this.maybeAutoOpenDevTools();
-    this.emit('did-finish-load');
   }
 
   private maybeAutoOpenDevTools(): void {
@@ -327,7 +365,6 @@ export class BrowserWindow extends EventEmitter {
    */
   focus(): void {
     native.focusWindow(this.id);
-    this.emit('focus');
   }
 
   /**
@@ -382,7 +419,7 @@ export class BrowserWindow extends EventEmitter {
    * Check if window is destroyed
    */
   isDestroyed(): boolean {
-    return this.destroyed;
+    return this.state.isDestroyed();
   }
 
   // Window controls
@@ -451,8 +488,6 @@ export class BrowserWindow extends EventEmitter {
       bounds.width ?? null,
       bounds.height ?? null
     );
-    this.emit('resize');
-    this.emit('move');
   }
 
   /**
@@ -460,7 +495,6 @@ export class BrowserWindow extends EventEmitter {
    */
   setSize(width: number, height: number, animate = false): void {
     native.setWindowBounds(this.id, null, null, width, height);
-    this.emit('resize');
   }
 
   /**
@@ -468,7 +502,6 @@ export class BrowserWindow extends EventEmitter {
    */
   setPosition(x: number, y: number, animate = false): void {
     native.setWindowBounds(this.id, x, y, null, null);
-    this.emit('move');
   }
 
   /**
@@ -489,14 +522,15 @@ export class BrowserWindow extends EventEmitter {
    */
   setTitle(title: string): void {
     native.setWindowTitle(this.id, title);
+    this.state.setTitle(title);
+    this.webContents.setTitle(title);
   }
 
   /**
    * Get window title
    */
   getTitle(): string {
-    // Would need native support
-    return this.options.title ?? 'Bunlet';
+    return this.state.getTitle();
   }
 
   /**
@@ -522,29 +556,19 @@ export class BrowserWindow extends EventEmitter {
    * Close the window
    */
   close(): void {
-    const event: BunletEvent = {
-      defaultPrevented: false,
-      preventDefault() {
-        this.defaultPrevented = true;
-      },
-    };
-
-    this.emit('close', event);
-
-    if (!event.defaultPrevented) {
-      this.destroy();
-    }
+    this.requestClose();
   }
 
   /**
    * Force close without events
    */
   destroy(): void {
-    if (this.destroyed) return;
+    if (this.state.isDestroyed()) return;
 
     native.closeWindow(this.id);
-    windowRegistry.delete(this.id);
-    this.destroyed = true;
+    detachSessionFromWindow(this.id);
+    windowManager.unregister(this.id);
+    this.state.markDestroyed();
     this.emit('closed');
   }
 
@@ -554,10 +578,61 @@ export class BrowserWindow extends EventEmitter {
    * Send message to renderer
    */
   send(channel: string, ...args: unknown[]): void {
+    assertRuntimeCapability('mainToRendererPush', 'BrowserWindow.send()');
     const message = JSON.stringify({
       channel,
       args,
     });
     native.sendIpcMessage(this.id, message);
   }
+
+  /** @internal */
+  handleNativeEvent(event: NativeWindowEvent): void {
+    applyNativeWindowEvent(
+      {
+        emit: (eventName, ...args) => this.emit(eventName, ...args),
+        setWindowTitle: (title) => this.setWindowTitle(title),
+        setWebContentsTitle: (title) => this.setWebContentsTitle(title),
+        recordNavigation: (url) => this.webContents.recordNavigation(url),
+        recordUnknownNavigation: () => this.webContents.recordUnknownNavigation(),
+        recordHistoryBack: () => this.webContents.recordHistoryBack(),
+        recordHistoryForward: () => this.webContents.recordHistoryForward(),
+        getCurrentUrl: () => this.getCurrentUrl(),
+        isDestroyed: () => this.state.isDestroyed(),
+        requestClose: () => this.requestClose(),
+        markClosed: () => this.markClosed(),
+      },
+      event
+    );
+  }
+
+  private requestClose(): void {
+    const event: BunletEvent = createCloseEvent();
+    this.emit('close', event);
+
+    if (!event.defaultPrevented) {
+      this.destroy();
+    }
+  }
+
+  private setWindowTitle(title: string): void {
+    this.state.setTitle(title);
+  }
+
+  private setWebContentsTitle(title: string): void {
+    this.webContents.setTitle(title);
+  }
+
+  private getCurrentUrl(): string {
+    return this.webContents.getURL();
+  }
+
+  private markClosed(): void {
+    detachSessionFromWindow(this.id);
+    windowManager.unregister(this.id);
+    this.state.markDestroyed();
+    this.emit('closed');
+  }
 }
+
+export { windowManager, windowRegistry };

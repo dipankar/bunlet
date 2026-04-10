@@ -5,6 +5,8 @@ Welcome to the Bunlet documentation! Bunlet is a desktop application framework t
 ## Quick Links
 
 - [Quick Start](getting-started/quick-start.md) - Create your first app in 5 minutes
+- [Architecture Task List](architecture/task-list.md) - Structural backlog for roadmap completion
+- [Capability Matrix](architecture/capability-matrix.md) - Backend feature availability and gating
 - [CLI Reference](cli/overview.md) - Command line tools
 - [API Documentation](api/app.md) - Complete API reference
 - [Size Optimization](packaging/size-optimization.md) - Minimize bundle size
@@ -59,6 +61,8 @@ Welcome to the Bunlet documentation! Bunlet is a desktop application framework t
 - [autoUpdater](api/auto-updater.md)
 
 ### Advanced Topics
+- [Architecture Overview](architecture/overview.md)
+- [Architecture Task List](architecture/task-list.md)
 - [Native Modules](advanced/native-modules.md)
 - [Multi-Window Apps](advanced/multi-window.md)
 - [Security](advanced/security.md)

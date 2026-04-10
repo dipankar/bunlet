@@ -2,10 +2,13 @@
 
 mod clipboard;
 mod dialog;
+mod event_loop;
 mod file_watcher;
+mod ipc;
 mod menu;
 mod notification;
 mod power_monitor;
+mod runtime_state;
 mod screen;
 mod session;
 mod shell;
@@ -14,149 +17,25 @@ mod tray;
 mod window;
 
 use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction};
 use napi_derive::napi;
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use send_wrapper::SendWrapper;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget};
-use tao::window::{Window, WindowId};
+use tao::event_loop::EventLoopWindowTarget;
 
 
 pub use clipboard::*;
 pub use dialog::*;
+pub use event_loop::*;
 pub use file_watcher::*;
+pub use ipc::*;
 pub use menu::*;
 pub use notification::*;
 pub use power_monitor::*;
+pub use runtime_state::*;
 pub use screen::*;
 pub use session::*;
 pub use shell::*;
 pub use shortcuts::*;
 pub use tray::*;
 pub use window::*;
-
-// Global state
-static WINDOW_COUNTER: AtomicU32 = AtomicU32::new(1);
-static WINDOWS: Lazy<Mutex<HashMap<u32, SendWrapper<WindowState>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-static IPC_CALLBACK: Lazy<Mutex<Option<ThreadsafeFunction<IpcMessage, ErrorStrategy::Fatal>>>> =
-    Lazy::new(|| Mutex::new(None));
-static APP_EVENT_CALLBACK: Lazy<Mutex<Option<ThreadsafeFunction<AppEvent, ErrorStrategy::Fatal>>>> =
-    Lazy::new(|| Mutex::new(None));
-
-// Pending window creations (for async window creation from main thread)
-static PENDING_WINDOWS: Lazy<Mutex<Vec<PendingWindow>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
-// File server port tracking by base directory
-static FILE_SERVERS: Lazy<Mutex<HashMap<String, u16>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-
-/// Start a local HTTP server to serve files from the given directory
-/// Returns the port number the server is running on
-pub fn start_file_server(base_dir: std::path::PathBuf) -> std::result::Result<u16, String> {
-    let canonical_base = base_dir
-        .canonicalize()
-        .unwrap_or(base_dir)
-        .to_string_lossy()
-        .to_string();
-
-    // Check if a server is already running for this directory
-    if let Some(port) = FILE_SERVERS.lock().get(&canonical_base).copied() {
-        return Ok(port);
-    }
-
-    // Find an available port
-    let server = tiny_http::Server::http("127.0.0.1:0")
-        .map_err(|e| format!("Failed to start HTTP server: {}", e))?;
-
-    let port = server.server_addr().to_ip()
-        .ok_or_else(|| "Failed to get server address".to_string())?
-        .port();
-
-    FILE_SERVERS.lock().insert(canonical_base.clone(), port);
-
-    // Spawn server thread
-    std::thread::spawn(move || {
-        let base_dir = std::path::PathBuf::from(canonical_base);
-        for request in server.incoming_requests() {
-            let url_path = request.url().trim_start_matches('/');
-            let file_path = base_dir.join(url_path);
-
-            let response = if file_path.exists() && file_path.is_file() {
-                match std::fs::read(&file_path) {
-                    Ok(content) => {
-                        let mime_type = match file_path.extension().and_then(|e| e.to_str()) {
-                            Some("html") | Some("htm") => "text/html; charset=utf-8",
-                            Some("css") => "text/css; charset=utf-8",
-                            Some("js") => "application/javascript; charset=utf-8",
-                            Some("json") => "application/json; charset=utf-8",
-                            Some("png") => "image/png",
-                            Some("jpg") | Some("jpeg") => "image/jpeg",
-                            Some("gif") => "image/gif",
-                            Some("svg") => "image/svg+xml",
-                            Some("woff") => "font/woff",
-                            Some("woff2") => "font/woff2",
-                            Some("ttf") => "font/ttf",
-                            Some("ico") => "image/x-icon",
-                            Some("webp") => "image/webp",
-                            _ => "application/octet-stream",
-                        };
-                        tiny_http::Response::from_data(content)
-                            .with_header(
-                                tiny_http::Header::from_bytes(&b"Content-Type"[..], mime_type.as_bytes())
-                                    .unwrap()
-                            )
-                    }
-                    Err(_) => tiny_http::Response::from_string("Internal Server Error")
-                        .with_status_code(500),
-                }
-            } else {
-                tiny_http::Response::from_string("Not Found").with_status_code(404)
-            };
-
-            let _ = request.respond(response);
-        }
-    });
-
-    Ok(port)
-}
-
-/// Window state stored globally (wrapped in SendWrapper for thread safety)
-pub struct WindowState {
-    pub tao_window_id: WindowId,
-    pub window: Window,
-    pub webview: wry::WebView,
-}
-
-/// IPC message from WebView
-#[napi(object)]
-pub struct IpcMessage {
-    pub window_id: u32,
-    pub message: String,
-}
-
-/// App-level event from native runtime
-#[napi(object)]
-pub struct AppEvent {
-    pub event: String,
-}
-
-/// Pending window to be created
-pub struct PendingWindow {
-    pub id: u32,
-    pub options: WindowOptions,
-    pub url: Option<String>,
-    pub html: Option<String>,
-}
-
-/// Generate a new window ID
-pub fn next_window_id() -> u32 {
-    WINDOW_COUNTER.fetch_add(1, Ordering::SeqCst)
-}
 
 /// Initialize the application
 #[napi]
@@ -223,99 +102,6 @@ pub fn get_all_window_ids() -> Vec<u32> {
     WINDOWS.lock().keys().cloned().collect()
 }
 
-/// Set IPC handler callback
-#[napi]
-pub fn set_ipc_handler(callback: ThreadsafeFunction<IpcMessage, ErrorStrategy::Fatal>) {
-    let mut handler = IPC_CALLBACK.lock();
-    *handler = Some(callback);
-}
-
-/// Set app event handler callback
-#[napi]
-pub fn set_app_event_handler(callback: ThreadsafeFunction<AppEvent, ErrorStrategy::Fatal>) {
-    let mut handler = APP_EVENT_CALLBACK.lock();
-    *handler = Some(callback);
-}
-
-// Queue for pending IPC messages
-static PENDING_IPC: Lazy<Mutex<Vec<IpcMessage>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
-/// Dispatch IPC message - queue it and trigger processing via GTK timeout
-pub fn dispatch_ipc(window_id: u32, message: String) {
-    let msg = IpcMessage { window_id, message };
-    PENDING_IPC.lock().push(msg);
-
-    // Use GTK's idle handler to process the queue on Linux
-    #[cfg(target_os = "linux")]
-    gtk::glib::idle_add_local_once(|| {
-        process_pending_ipc();
-    });
-
-    #[cfg(not(target_os = "linux"))]
-    process_pending_ipc();
-}
-
-/// Process pending IPC messages by calling the JS callback
-fn process_pending_ipc() {
-    let messages: Vec<IpcMessage> = PENDING_IPC.lock().drain(..).collect();
-
-    if messages.is_empty() {
-        return;
-    }
-
-    // Call from a separate thread to ensure proper async semantics
-    std::thread::spawn(move || {
-        if let Some(callback) = IPC_CALLBACK.lock().as_ref() {
-            for msg in messages {
-                callback.call(msg, napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
-            }
-        }
-    });
-}
-
-/// Poll and process pending IPC messages - called from JS (fallback)
-#[napi]
-pub fn poll_ipc_messages() -> Vec<IpcMessage> {
-    PENDING_IPC.lock().drain(..).collect()
-}
-
-/// Dispatch app event to callback
-pub fn dispatch_app_event(event: &str) {
-    if let Some(callback) = APP_EVENT_CALLBACK.lock().as_ref() {
-        callback.call(
-            AppEvent {
-                event: event.to_string(),
-            },
-            napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
-        );
-    }
-}
-
-/// Send IPC message to a window
-#[napi]
-pub fn send_ipc_message(window_id: u32, message: String) -> Result<()> {
-    let windows = WINDOWS.lock();
-    let state = windows
-        .get(&window_id)
-        .ok_or_else(|| Error::new(Status::InvalidArg, format!("Window {} not found", window_id)))?;
-
-    let script = format!(
-        r#"
-        if (window.__bunlet_ipc_handler) {{
-            window.__bunlet_ipc_handler({});
-        }}
-        "#,
-        serde_json::to_string(&message).unwrap_or_else(|_| "null".to_string())
-    );
-
-    state
-        .webview
-        .evaluate_script(&script)
-        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-
-    Ok(())
-}
-
 fn build_initialization_script(options: &WindowOptions) -> std::result::Result<String, String> {
     let mut script = r#"
         // Bunlet IPC bridge
@@ -324,6 +110,7 @@ fn build_initialization_script(options: &WindowOptions) -> std::result::Result<S
             _channelListeners: {},
             _pending: {},
             _nextId: 1,
+            _titleObserverInstalled: false,
             invoke: function(payload) {
                 const id = (payload && payload.id != null) ? String(payload.id) : String(this._nextId++);
                 const message = {
@@ -354,6 +141,16 @@ fn build_initialization_script(options: &WindowOptions) -> std::result::Result<S
                 if (!this._channelListeners[channel]) return;
                 this._channelListeners[channel] =
                     this._channelListeners[channel].filter((fn) => fn !== handler);
+            },
+            _emitInternalWindowEvent: function(event, extra) {
+                try {
+                    window.ipc.postMessage(JSON.stringify(Object.assign({
+                        type: '__bunlet_internal_window_event',
+                        event,
+                        title: document.title,
+                        url: window.location.href
+                    }, extra || {})));
+                } catch (_) {}
             }
         };
 
@@ -435,6 +232,78 @@ fn build_initialization_script(options: &WindowOptions) -> std::result::Result<S
                 window[apiKey] = clonedApi;
             }
         };
+
+        (function registerBunletWindowObservers() {
+            function emitNavigation() {
+                window.__bunlet._emitInternalWindowEvent('web-contents-navigation', {
+                    title: document.title,
+                    url: window.location.href
+                });
+            }
+
+            function emitPageTitle() {
+                window.__bunlet._emitInternalWindowEvent('web-contents-title-updated', {
+                    title: document.title
+                });
+            }
+
+            function installTitleObserver() {
+                if (window.__bunlet._titleObserverInstalled || typeof MutationObserver !== 'function') {
+                    return;
+                }
+
+                var target = document.querySelector('title') || document.head || document.documentElement;
+                if (!target) {
+                    return;
+                }
+
+                window.__bunlet._titleObserverInstalled = true;
+                var observer = new MutationObserver(function() {
+                    emitPageTitle();
+                });
+                observer.observe(target, { childList: true, characterData: true, subtree: true });
+            }
+
+            var originalPushState = history.pushState;
+            if (typeof originalPushState === 'function') {
+                history.pushState = function() {
+                    var result = originalPushState.apply(this, arguments);
+                    emitNavigation();
+                    return result;
+                };
+            }
+
+            var originalReplaceState = history.replaceState;
+            if (typeof originalReplaceState === 'function') {
+                history.replaceState = function() {
+                    var result = originalReplaceState.apply(this, arguments);
+                    emitNavigation();
+                    return result;
+                };
+            }
+
+            window.addEventListener('popstate', emitNavigation);
+            window.addEventListener('hashchange', emitNavigation);
+            window.addEventListener('load', function() {
+                installTitleObserver();
+                emitNavigation();
+                emitPageTitle();
+            });
+
+            document.addEventListener('readystatechange', function() {
+                if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                    installTitleObserver();
+                    emitNavigation();
+                    emitPageTitle();
+                }
+            });
+
+            if (document.readyState !== 'loading') {
+                installTitleObserver();
+                emitNavigation();
+                emitPageTitle();
+            }
+        })();
     "#
     .to_string();
 
@@ -530,6 +399,7 @@ pub fn create_window_in_loop(
 
     // Custom protocol handler for app:// URLs
     // This allows loading local files via app://path/to/file
+    #[cfg(target_os = "linux")]
     let app_protocol_handler = |_webview_id: wry::WebViewId, request: wry::http::Request<Vec<u8>>| {
         use std::borrow::Cow;
         use wry::http::{Response, StatusCode};
@@ -679,206 +549,4 @@ pub fn create_window_in_loop(
         window,
         webview,
     })
-}
-
-// Global event loop stored for run_return usage
-static EVENT_LOOP: Lazy<Mutex<Option<SendWrapper<tao::event_loop::EventLoop<()>>>>> =
-    Lazy::new(|| Mutex::new(None));
-static SHOULD_QUIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Initialize the event loop and create windows
-#[napi]
-pub fn init_event_loop() -> Result<()> {
-    #[cfg(target_os = "linux")]
-    let event_loop = {
-        use tao::platform::unix::EventLoopBuilderExtUnix;
-        EventLoopBuilder::new()
-            .with_app_id("com.bunlet.app")
-            .build()
-    };
-
-    #[cfg(not(target_os = "linux"))]
-    let event_loop = EventLoopBuilder::new().build();
-
-    // Process any pending window creations
-    {
-        let pending = PENDING_WINDOWS.lock().drain(..).collect::<Vec<_>>();
-        for pending_window in pending {
-            match create_window_in_loop(pending_window.id, &pending_window.options, &event_loop) {
-                Ok(state) => {
-                    if let Some(url) = &pending_window.url {
-                        let _ = state.webview.load_url(url);
-                    }
-                    if let Some(html) = &pending_window.html {
-                        let encoded = urlencoding::encode(html);
-                        let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
-                    }
-                    WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
-                }
-                Err(e) => {
-                    eprintln!("Failed to create window {}: {}", pending_window.id, e);
-                }
-            }
-        }
-    }
-
-    *EVENT_LOOP.lock() = Some(SendWrapper::new(event_loop));
-    Ok(())
-}
-
-/// Result of pumping events
-#[napi(object)]
-pub struct PumpResult {
-    pub should_quit: bool,
-    pub messages: Vec<IpcMessage>,
-}
-
-/// Pump events (non-blocking) - returns pending IPC messages
-#[napi]
-#[cfg(target_os = "linux")]
-pub fn pump_events() -> Result<PumpResult> {
-    use std::sync::atomic::Ordering;
-
-    let messages = PENDING_IPC.lock().drain(..).collect::<Vec<_>>();
-
-    // Process GTK events without blocking
-    while gtk::events_pending() {
-        gtk::main_iteration();
-    }
-
-    // Process any new pending window creations
-    if let Some(event_loop_wrapper) = EVENT_LOOP.lock().as_ref() {
-        let pending = PENDING_WINDOWS.lock().drain(..).collect::<Vec<_>>();
-        for pending_window in pending {
-            // Note: This is tricky - we can't easily create windows outside of run/run_return
-            // For now, we'll skip this and require windows to be created before init_event_loop
-            eprintln!("Warning: Cannot create window after event loop started in pump mode");
-        }
-    }
-
-    Ok(PumpResult {
-        should_quit: SHOULD_QUIT.load(Ordering::SeqCst) || WINDOWS.lock().is_empty(),
-        messages,
-    })
-}
-
-#[napi]
-#[cfg(not(target_os = "linux"))]
-pub fn pump_events() -> Result<PumpResult> {
-    let messages = PENDING_IPC.lock().drain(..).collect::<Vec<_>>();
-    Ok(PumpResult {
-        should_quit: WINDOWS.lock().is_empty(),
-        messages,
-    })
-}
-
-/// Run the event loop (blocking) - legacy API
-/// This creates windows and runs the main loop
-#[napi]
-pub fn run_event_loop() -> Result<()> {
-    #[cfg(target_os = "linux")]
-    let event_loop = {
-        use tao::platform::unix::EventLoopBuilderExtUnix;
-        EventLoopBuilder::new()
-            .with_app_id("com.bunlet.app")
-            .build()
-    };
-
-    #[cfg(not(target_os = "linux"))]
-    let event_loop = EventLoopBuilder::new().build();
-
-    let mut window_all_closed_emitted = false;
-
-    // Process any pending window creations
-    {
-        let pending = PENDING_WINDOWS.lock().drain(..).collect::<Vec<_>>();
-        for pending_window in pending {
-            match create_window_in_loop(pending_window.id, &pending_window.options, &event_loop) {
-                Ok(state) => {
-                    if let Some(url) = &pending_window.url {
-                        let _ = state.webview.load_url(url);
-                    }
-                    if let Some(html) = &pending_window.html {
-                        let encoded = urlencoding::encode(html);
-                        let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
-                    }
-                    WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
-                    window_all_closed_emitted = false;
-                }
-                Err(e) => {
-                    eprintln!("Failed to create window {}: {}", pending_window.id, e);
-                }
-            }
-        }
-    }
-
-    event_loop.run(move |event, event_loop, control_flow| {
-        *control_flow = ControlFlow::Wait;
-
-        // Process pending window creations
-        {
-            let pending = PENDING_WINDOWS.lock().drain(..).collect::<Vec<_>>();
-            for pending_window in pending {
-                match create_window_in_loop(pending_window.id, &pending_window.options, event_loop) {
-                    Ok(state) => {
-                        if let Some(url) = &pending_window.url {
-                            let _ = state.webview.load_url(url);
-                        }
-                        if let Some(html) = &pending_window.html {
-                            let encoded = urlencoding::encode(html);
-                            let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
-                        }
-                        WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
-                        window_all_closed_emitted = false;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to create window {}: {}", pending_window.id, e);
-                    }
-                }
-            }
-        }
-
-        match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                window_id,
-                ..
-            } => {
-                let mut windows = WINDOWS.lock();
-                let id_to_remove = windows.iter().find_map(|(id, state)| {
-                    if state.tao_window_id == window_id {
-                        Some(*id)
-                    } else {
-                        None
-                    }
-                });
-
-                if let Some(id) = id_to_remove {
-                    windows.remove(&id);
-                }
-
-                if windows.is_empty() {
-                    if !window_all_closed_emitted {
-                        dispatch_app_event("window-all-closed");
-                        window_all_closed_emitted = true;
-                    }
-                    *control_flow = ControlFlow::Exit;
-                }
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Destroyed,
-                ..
-            } => {
-                let windows = WINDOWS.lock();
-                if windows.is_empty() {
-                    if !window_all_closed_emitted {
-                        dispatch_app_event("window-all-closed");
-                        window_all_closed_emitted = true;
-                    }
-                    *control_flow = ControlFlow::Exit;
-                }
-            }
-            _ => {}
-        }
-    });
 }

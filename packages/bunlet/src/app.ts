@@ -4,12 +4,12 @@
 
 import { EventEmitter } from 'events';
 import { z, ZodType } from 'zod';
-import native from './native/bindings';
-import type { BrowserWindow } from './browser-window';
+import type { NativeWindowEvent } from './windows/events';
 import type { PathName, IPCContext } from './types';
-import { windowRegistry } from './browser-window';
 import * as os from 'os';
 import * as path from 'path';
+import { native } from './runtime';
+import { windowManager } from './windows/manager';
 
 /**
  * IPC handler function type
@@ -22,6 +22,10 @@ type IPCHandler<T> = (args: T, context: IPCContext) => Promise<unknown> | unknow
 interface StoredHandler {
   schema: ZodType;
   handler: IPCHandler<unknown>;
+}
+
+interface NativeAppEvent extends Partial<NativeWindowEvent> {
+  event: string;
 }
 
 /**
@@ -80,10 +84,8 @@ class App extends EventEmitter {
 
       // Set up native app lifecycle handler
       if (typeof native.setAppEventHandler === 'function') {
-        native.setAppEventHandler((event) => {
-          if (event.event === 'window-all-closed') {
-            this.emit('window-all-closed');
-          }
+        native.setAppEventHandler((event: NativeAppEvent) => {
+          this.handleNativeAppEvent(event);
         });
       }
 
@@ -99,6 +101,30 @@ class App extends EventEmitter {
     }
   }
 
+  private handleNativeAppEvent(event: NativeAppEvent): void {
+    if (event.event === 'window-all-closed') {
+      this.emit('window-all-closed');
+      return;
+    }
+
+    if (typeof event.windowId !== 'number') {
+      return;
+    }
+
+    const window = windowManager.get(event.windowId);
+    if (!window) {
+      return;
+    }
+
+    window.handleNativeEvent({
+      event: event.event,
+      windowId: event.windowId,
+      title: event.title,
+      url: event.url,
+      bounds: event.bounds,
+    });
+  }
+
   /**
    * Handle incoming IPC message from a window
    */
@@ -106,9 +132,23 @@ class App extends EventEmitter {
     try {
       const request = JSON.parse(message);
 
+      if (
+        request?.type === '__bunlet_internal_window_event' &&
+        typeof request.event === 'string'
+      ) {
+        this.handleNativeAppEvent({
+          event: request.event,
+          windowId,
+          title: typeof request.title === 'string' ? request.title : undefined,
+          url: typeof request.url === 'string' ? request.url : undefined,
+          bounds: request.bounds,
+        });
+        return;
+      }
+
       // Fire-and-forget event messages from renderer
       if (request?.type === 'event' && typeof request.channel === 'string') {
-        const window = windowRegistry.get(windowId);
+        const window = windowManager.get(windowId);
         const args = Array.isArray(request.args) ? request.args : [];
         this.emit(request.channel, { window, windowId }, ...args);
         return;
@@ -136,7 +176,7 @@ class App extends EventEmitter {
         const validatedParams = handler.schema.parse(params);
 
         // Get window from registry
-        const window = windowRegistry.get(windowId);
+        const window = windowManager.get(windowId);
         if (!window) {
           this.sendIpcResponse(windowId, id, null, {
             code: -32000,
@@ -350,7 +390,6 @@ class App extends EventEmitter {
       }
 
       if (result.shouldQuit) {
-        this.emit('window-all-closed');
         if (process.platform !== 'darwin') {
           this.quit();
         }

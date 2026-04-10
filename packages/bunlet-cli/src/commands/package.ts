@@ -6,9 +6,19 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import {
+  loadBuildArtifactManifest,
+  validateBuildArtifactManifest,
+} from '../artifacts/build-manifest';
+import {
+  createReleaseArtifactManifest,
+  writeReleaseArtifactManifest,
+  type ReleaseArtifact,
+} from '../artifacts/release-manifest';
 import { buildDarwinApp, createDmg } from '../build/platforms/darwin';
 import { buildLinux } from '../build/platforms/linux';
 import { buildWin32 } from '../build/platforms/win32';
+import { loadBunletConfig, loadPackageJson } from '../config';
 
 export interface PackageOptions {
   format?: string;
@@ -18,44 +28,12 @@ export interface PackageOptions {
   linux?: boolean;
 }
 
-interface BunletConfig {
-  main?: string;
-  renderer?: {
-    root?: string;
-  };
-  build?: {
-    outDir?: string;
-  };
-  package?: {
-    name?: string;
-    version?: string;
-    description?: string;
-    author?: string;
-    icon?: string;
-    bundleId?: string;
-    category?: string;
-    mac?: {
-      category?: string;
-      target?: string[];
-      identity?: string;
-    };
-    win?: {
-      target?: string[];
-    };
-    linux?: {
-      target?: string[];
-      category?: string;
-      maintainer?: string;
-    };
-  };
-}
-
 /**
  * Package the application
  */
 export async function packageCommand(options: PackageOptions): Promise<void> {
   const root = process.cwd();
-  const config = await loadConfig(root);
+  const config = await loadBunletConfig(root);
 
   const buildDir = path.resolve(root, config.build?.outDir || 'dist');
   const packageDir = path.resolve(root, 'release');
@@ -67,10 +45,25 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
     process.exit(1);
   }
 
+  const buildManifest = loadBuildArtifactManifest(buildDir);
+  if (buildManifest) {
+    const manifestErrors = validateBuildArtifactManifest(buildDir, buildManifest);
+    if (manifestErrors.length > 0) {
+      console.error('\n  Error: Build artifact manifest is invalid.');
+      for (const error of manifestErrors) {
+        console.error(`  - ${error}`);
+      }
+      console.error('');
+      process.exit(1);
+    }
+  }
+
   // Get app info from config or package.json
   const packageJson = await loadPackageJson(root);
-  const appName = config.package?.name || packageJson.name || path.basename(root);
-  const appVersion = config.package?.version || packageJson.version || '1.0.0';
+  const appName =
+    config.package?.name || buildManifest?.app.name || packageJson.name || path.basename(root);
+  const appVersion =
+    config.package?.version || buildManifest?.app.version || packageJson.version || '1.0.0';
   const appDescription = config.package?.description || packageJson.description;
   const appAuthor = config.package?.author || packageJson.author;
   const appIcon = config.package?.icon
@@ -141,7 +134,7 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
   }
 
   const startTime = Date.now();
-  const results: string[] = [];
+  const results: ReleaseArtifact[] = [];
 
   // Build for each platform
   for (const platform of platforms) {
@@ -223,12 +216,23 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
+  const releaseArtifactManifest = createReleaseArtifactManifest({
+    name: appName,
+    version: appVersion,
+    artifacts: results.map((result) => ({
+      ...result,
+      path: path.relative(packageDir, result.path),
+    })),
+  });
+  writeReleaseArtifactManifest(packageDir, releaseArtifactManifest);
+
   console.log(`\n  ✓ Packaging completed in ${duration}s\n`);
   console.log('  Output files:');
   for (const result of results) {
-    const stat = fs.statSync(result);
+    const stat = fs.statSync(result.path);
     const size = formatSize(stat.size);
-    console.log(`    ${path.basename(result)} (${size})`);
+    const suffix = result.kind === 'directory' ? '/' : '';
+    console.log(`    ${result.name}${suffix} (${size})`);
   }
   console.log('');
 }
@@ -239,7 +243,7 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
 async function buildForDarwin(
   options: Parameters<typeof buildDarwinApp>[0],
   targets: string[],
-  results: string[]
+  results: ReleaseArtifact[]
 ): Promise<void> {
   // Always build .app first
   const appResult = await buildDarwinApp(options);
@@ -250,7 +254,13 @@ async function buildForDarwin(
 
   if (appResult.appPath) {
     console.log(`    ✓ ${path.basename(appResult.appPath)}`);
-    results.push(appResult.appPath);
+    results.push({
+      platform: 'darwin',
+      format: 'app',
+      path: appResult.appPath,
+      name: path.basename(appResult.appPath),
+      kind: 'directory',
+    });
   }
 
   // Create DMG if requested
@@ -264,7 +274,13 @@ async function buildForDarwin(
 
     if (dmgResult.success && dmgResult.dmgPath) {
       console.log(`    ✓ ${path.basename(dmgResult.dmgPath)}`);
-      results.push(dmgResult.dmgPath);
+      results.push({
+        platform: 'darwin',
+        format: 'dmg',
+        path: dmgResult.dmgPath,
+        name: path.basename(dmgResult.dmgPath),
+        kind: 'file',
+      });
     } else {
       console.warn(`    ⚠ DMG creation failed: ${dmgResult.error}`);
     }
@@ -277,14 +293,20 @@ async function buildForDarwin(
 async function buildForLinux(
   options: Parameters<typeof buildLinux>[0],
   targets: string[],
-  results: string[]
+  results: ReleaseArtifact[]
 ): Promise<void> {
   // Build AppImage if requested
   if (targets.includes('appimage')) {
     const result = await buildLinux(options, 'appimage');
     if (result.success && result.appImagePath) {
       console.log(`    ✓ ${path.basename(result.appImagePath)}`);
-      results.push(result.appImagePath);
+      results.push({
+        platform: 'linux',
+        format: path.extname(result.appImagePath).toLowerCase() === '.appimage' ? 'appimage' : 'folder',
+        path: result.appImagePath,
+        name: path.basename(result.appImagePath),
+        kind: fs.statSync(result.appImagePath).isDirectory() ? 'directory' : 'file',
+      });
     } else if (result.error) {
       console.warn(`    ⚠ AppImage creation failed: ${result.error}`);
     }
@@ -295,7 +317,13 @@ async function buildForLinux(
     const result = await buildLinux(options, 'deb');
     if (result.success && result.debPath) {
       console.log(`    ✓ ${path.basename(result.debPath)}`);
-      results.push(result.debPath);
+      results.push({
+        platform: 'linux',
+        format: 'deb',
+        path: result.debPath,
+        name: path.basename(result.debPath),
+        kind: 'file',
+      });
     } else if (result.error) {
       console.warn(`    ⚠ DEB creation failed: ${result.error}`);
     }
@@ -308,14 +336,20 @@ async function buildForLinux(
 async function buildForWin32(
   options: Parameters<typeof buildWin32>[0],
   targets: string[],
-  results: string[]
+  results: ReleaseArtifact[]
 ): Promise<void> {
   // Build folder
   if (targets.includes('folder') || targets.includes('zip')) {
     const result = await buildWin32(options, 'folder');
     if (result.success && result.folderPath) {
       console.log(`    ✓ ${path.basename(result.folderPath)}/`);
-      results.push(result.folderPath);
+      results.push({
+        platform: 'win32',
+        format: 'folder',
+        path: result.folderPath,
+        name: path.basename(result.folderPath),
+        kind: 'directory',
+      });
     } else if (result.error) {
       console.warn(`    ⚠ Folder creation failed: ${result.error}`);
     }
@@ -326,63 +360,17 @@ async function buildForWin32(
     const result = await buildWin32(options, 'exe');
     if (result.success && result.exePath) {
       console.log(`    ✓ ${path.basename(result.exePath)}`);
-      results.push(result.exePath);
+      results.push({
+        platform: 'win32',
+        format: targets.includes('portable') ? 'portable' : 'exe',
+        path: result.exePath,
+        name: path.basename(result.exePath),
+        kind: 'file',
+      });
     } else if (result.error) {
       console.warn(`    ⚠ EXE creation failed: ${result.error}`);
     }
   }
-}
-
-/**
- * Load bunlet config
- */
-async function loadConfig(root: string): Promise<BunletConfig> {
-  const configFiles = [
-    'bunlet.config.ts',
-    'bunlet.config.js',
-    'bunlet.config.mjs',
-    'bunlet.config.json',
-  ];
-
-  for (const configFile of configFiles) {
-    const configPath = path.join(root, configFile);
-
-    if (fs.existsSync(configPath)) {
-      try {
-        if (configFile.endsWith('.json')) {
-          const content = fs.readFileSync(configPath, 'utf-8');
-          return JSON.parse(content);
-        } else {
-          const module = await import(configPath);
-          return module.default || module;
-        }
-      } catch (error) {
-        console.warn(`Warning: Failed to load ${configFile}:`, error);
-      }
-    }
-  }
-
-  return {};
-}
-
-/**
- * Load package.json
- */
-async function loadPackageJson(
-  root: string
-): Promise<{ name?: string; version?: string; description?: string; author?: string }> {
-  const packageJsonPath = path.join(root, 'package.json');
-
-  if (fs.existsSync(packageJsonPath)) {
-    try {
-      const content = fs.readFileSync(packageJsonPath, 'utf-8');
-      return JSON.parse(content);
-    } catch {
-      return {};
-    }
-  }
-
-  return {};
 }
 
 /**

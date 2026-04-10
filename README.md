@@ -223,7 +223,8 @@ bunlet/
 │   └── bunlet-cli/          # CLI tool (WIP)
 │
 ├── examples/                # Demo applications
-└── documentation/           # Documentation
+├── docs/                    # Canonical documentation
+└── documentation/           # Deprecated documentation stub
 ```
 
 ## Architecture
@@ -255,9 +256,8 @@ bunlet/
 - **WebView**: Requires WebKitGTK to be installed (`libwebkit2gtk-4.1-dev` on Ubuntu/Debian)
 
 ### General
-- `webContents.send()` (main-to-renderer push) not yet implemented - use IPC polling instead
-- Session/Cookie management not yet implemented
-- Preload scripts with context isolation not yet implemented
+- CEF backend parity is incomplete and capability-gated
+- Native-originated window and navigation sync is still being tightened for full parity
 
 ## Requirements
 
@@ -299,6 +299,8 @@ bun test
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+Repository docs live in [docs/index.md](docs/index.md). The `documentation/` tree is deprecated.
 
 ## License
 

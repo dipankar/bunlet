@@ -18,6 +18,10 @@ export interface Rectangle {
 export interface WebPreferences {
   /** Path to preload script */
   preload?: string;
+  /** Session partition for this window's web contents */
+  partition?: string;
+  /** Explicit session object to associate with this window */
+  session?: import('./session').Session;
   /** Enable DevTools (default: true) */
   devTools?: boolean;
   /** Enable context isolation (default: true) */

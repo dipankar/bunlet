@@ -6,7 +6,7 @@
 
 // Core exports
 export { app } from './app';
-export { BrowserWindow, WebContents, windowRegistry } from './browser-window';
+export { BrowserWindow, WebContents, windowManager, windowRegistry } from './browser-window';
 
 // Phase 2: Native APIs
 export { clipboard } from './clipboard';
@@ -89,3 +89,7 @@ export { z } from 'zod';
 // Config helper
 export { defineConfig } from './config';
 export type { BunletConfig } from './config';
+
+// Runtime backend
+export { runtime } from './runtime';
+export type { RuntimeBackend, RuntimeCapabilities } from './runtime';

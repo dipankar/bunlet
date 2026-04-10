@@ -26,7 +26,12 @@
  */
 
 import { EventEmitter } from 'events';
-import native from './native/bindings';
+import { assertRuntimeCapability, native } from './runtime';
+
+interface SessionWebPreferencesLike {
+  partition?: string;
+  session?: Session;
+}
 
 /**
  * Cookie information
@@ -112,18 +117,11 @@ export interface ClearStorageDataOptions {
  * Cookies class for managing cookies in a session
  */
 export class Cookies extends EventEmitter {
-  private windowId: number | null = null;
+  private readonly getWindowId: () => number | null;
 
-  constructor() {
+  constructor(getWindowId: () => number | null) {
     super();
-  }
-
-  /**
-   * Set the window ID for cookie operations
-   * @internal
-   */
-  setWindowId(windowId: number): void {
-    this.windowId = windowId;
+    this.getWindowId = getWindowId;
   }
 
   /**
@@ -132,12 +130,14 @@ export class Cookies extends EventEmitter {
    * @returns Promise resolving to array of cookies
    */
   async get(filter?: CookieFilter): Promise<Cookie[]> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.cookies.get()');
+    const windowId = this.getWindowId();
+    if (windowId === null) {
       return [];
     }
 
     try {
-      const cookies = await native.getCookies(this.windowId);
+      const cookies = await native.getCookies(windowId);
       let result: Cookie[] = cookies.map((c) => ({
         name: c.name,
         value: c.value,
@@ -180,7 +180,9 @@ export class Cookies extends EventEmitter {
    * @param details - Cookie details
    */
   async set(details: CookieDetails): Promise<void> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.cookies.set()');
+    const windowId = this.getWindowId();
+    if (windowId === null) {
       throw new Error('No window associated with this session');
     }
 
@@ -195,7 +197,7 @@ export class Cookies extends EventEmitter {
       expirationDate: details.expirationDate,
     };
 
-    native.setCookie(this.windowId, cookie);
+    native.setCookie(windowId, cookie);
     this.emit('changed', { cookie, removed: false, cause: 'explicit' });
   }
 
@@ -205,11 +207,13 @@ export class Cookies extends EventEmitter {
    * @param name - Cookie name
    */
   async remove(url: string, name: string): Promise<void> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.cookies.remove()');
+    const windowId = this.getWindowId();
+    if (windowId === null) {
       throw new Error('No window associated with this session');
     }
 
-    native.removeCookie(this.windowId, name, url);
+    native.removeCookie(windowId, name, url);
     this.emit('changed', { cookie: { name }, removed: true, cause: 'explicit' });
   }
 
@@ -238,6 +242,7 @@ export class Cookies extends EventEmitter {
 export class Session extends EventEmitter {
   private static sessions = new Map<string, Session>();
   private static _defaultSession: Session | null = null;
+  private static windowToPartition = new Map<number, string>();
 
   /** Session partition name */
   readonly partition: string;
@@ -245,13 +250,13 @@ export class Session extends EventEmitter {
   /** Cookies manager for this session */
   readonly cookies: Cookies;
 
-  /** Window ID associated with this session */
-  private windowId: number | null = null;
+  /** Windows currently attached to this session */
+  private readonly attachedWindowIds = new Set<number>();
 
   private constructor(partition: string) {
     super();
     this.partition = partition;
-    this.cookies = new Cookies();
+    this.cookies = new Cookies(() => this.getRepresentativeWindowId());
   }
 
   /**
@@ -269,7 +274,11 @@ export class Session extends EventEmitter {
    * @param partition - Partition name (prefix with 'persist:' for persistent storage)
    */
   static fromPartition(partition: string): Session {
-    const normalizedPartition = partition.startsWith('persist:') ? partition : `persist:${partition}`;
+    assertRuntimeCapability('sessionPartitions', 'Session.fromPartition()');
+    const normalizedPartition = normalizePartition(partition);
+    if (normalizedPartition === '') {
+      return Session.defaultSession;
+    }
 
     let session = Session.sessions.get(normalizedPartition);
     if (!session) {
@@ -281,12 +290,60 @@ export class Session extends EventEmitter {
   }
 
   /**
-   * Associate a window with this session
+   * Resolve the session associated with a window's web preferences.
    * @internal
    */
-  setWindowId(windowId: number): void {
-    this.windowId = windowId;
-    this.cookies.setWindowId(windowId);
+  static resolveForWebPreferences(webPreferences?: SessionWebPreferencesLike): Session {
+    if (!webPreferences) {
+      return Session.defaultSession;
+    }
+
+    if (webPreferences.session && webPreferences.partition) {
+      const normalizedPartition = normalizePartition(webPreferences.partition);
+      if (webPreferences.session.partition !== normalizedPartition) {
+        throw new Error(
+          `Session partition mismatch: expected ${normalizedPartition}, received ${webPreferences.session.partition}`
+        );
+      }
+    }
+
+    if (webPreferences.session) {
+      return webPreferences.session;
+    }
+
+    if (webPreferences.partition) {
+      return Session.fromPartition(webPreferences.partition);
+    }
+
+    return Session.defaultSession;
+  }
+
+  /**
+   * Attach a window to a session partition.
+   * @internal
+   */
+  static attachWindow(windowId: number, session: Session): void {
+    const existingPartition = Session.windowToPartition.get(windowId);
+    if (existingPartition && existingPartition !== session.partition) {
+      Session.getByPartition(existingPartition)?.detachWindow(windowId);
+    }
+
+    Session.windowToPartition.set(windowId, session.partition);
+    session.attachWindow(windowId);
+  }
+
+  /**
+   * Detach a window from its associated session partition.
+   * @internal
+   */
+  static detachWindow(windowId: number): void {
+    const partition = Session.windowToPartition.get(windowId);
+    if (partition === undefined) {
+      return;
+    }
+
+    Session.windowToPartition.delete(windowId);
+    Session.getByPartition(partition)?.detachWindow(windowId);
   }
 
   /**
@@ -294,7 +351,9 @@ export class Session extends EventEmitter {
    * @param options - Options for what to clear
    */
   async clearStorageData(options?: ClearStorageDataOptions): Promise<void> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.clearStorageData()');
+    const windowId = this.getRepresentativeWindowId();
+    if (windowId === null) {
       throw new Error('No window associated with this session');
     }
 
@@ -314,19 +373,21 @@ export class Session extends EventEmitter {
       nativeOptions.cacheStorage = options.storages.includes('cachestorage');
     }
 
-    native.clearStorageData(this.windowId, nativeOptions);
+    native.clearStorageData(windowId, nativeOptions);
   }
 
   /**
    * Clear the HTTP cache
    */
   async clearCache(): Promise<void> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.clearCache()');
+    const windowId = this.getRepresentativeWindowId();
+    if (windowId === null) {
       throw new Error('No window associated with this session');
     }
 
     // Clear cache storage
-    native.clearStorageData(this.windowId, {
+    native.clearStorageData(windowId, {
       cookies: false,
       localStorage: false,
       sessionStorage: false,
@@ -339,11 +400,13 @@ export class Session extends EventEmitter {
    * Get the user agent for this session
    */
   async getUserAgent(): Promise<string> {
-    if (this.windowId === null) {
+    assertRuntimeCapability('cookies', 'session.getUserAgent()');
+    const windowId = this.getRepresentativeWindowId();
+    if (windowId === null) {
       return 'bunlet';
     }
 
-    return native.getUserAgent(this.windowId);
+    return native.getUserAgent(windowId);
   }
 
   /**
@@ -368,6 +431,26 @@ export class Session extends EventEmitter {
   on(event: string, listener: (...args: any[]) => void): this {
     return super.on(event, listener);
   }
+
+  private static getByPartition(partition: string): Session | null {
+    if (partition === '') {
+      return Session.defaultSession;
+    }
+    return Session.sessions.get(partition) ?? null;
+  }
+
+  private attachWindow(windowId: number): void {
+    this.attachedWindowIds.add(windowId);
+  }
+
+  private detachWindow(windowId: number): void {
+    this.attachedWindowIds.delete(windowId);
+  }
+
+  private getRepresentativeWindowId(): number | null {
+    const result = this.attachedWindowIds.values().next();
+    return result.done ? null : result.value;
+  }
 }
 
 /**
@@ -389,3 +472,37 @@ export const session = {
     return Session.fromPartition(partition);
   },
 };
+
+function normalizePartition(partition: string): string {
+  if (!partition) {
+    return '';
+  }
+
+  return partition.startsWith('persist:') ? partition : `persist:${partition}`;
+}
+
+/**
+ * Resolve the session for a window's web preferences.
+ * @internal
+ */
+export function resolveSessionForWebPreferences(
+  webPreferences?: SessionWebPreferencesLike
+): Session {
+  return Session.resolveForWebPreferences(webPreferences);
+}
+
+/**
+ * Attach a window to a session partition.
+ * @internal
+ */
+export function attachSessionToWindow(windowId: number, currentSession: Session): void {
+  Session.attachWindow(windowId, currentSession);
+}
+
+/**
+ * Detach a window from its session partition.
+ * @internal
+ */
+export function detachSessionFromWindow(windowId: number): void {
+  Session.detachWindow(windowId);
+}

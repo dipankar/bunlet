@@ -22,7 +22,7 @@
  */
 
 import { EventEmitter } from 'events';
-import native from './native/bindings';
+import { native } from './runtime';
 
 /** Whether the callback has been set up */
 let callbackInitialized = false;

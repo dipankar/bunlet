@@ -5,7 +5,7 @@
  * files, and showing items in folder.
  */
 
-import native from './native/bindings';
+import { native } from './runtime';
 
 /**
  * Options for opening external URLs

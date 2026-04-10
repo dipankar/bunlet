@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
-import native from './native/bindings';
+import { native } from './runtime';
 import type { Rectangle } from './types';
 import type { Menu } from './menu';
 

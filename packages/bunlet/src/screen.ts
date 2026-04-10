@@ -20,7 +20,7 @@
  */
 
 import type { Rectangle } from './types';
-import native from './native/bindings';
+import { native } from './runtime';
 
 /**
  * Display information

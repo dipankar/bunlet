@@ -4,7 +4,7 @@
  * Provides cross-platform clipboard operations.
  */
 
-import native from './native/bindings';
+import { native } from './runtime';
 
 /**
  * Clipboard module for reading and writing clipboard content

@@ -6,29 +6,18 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import {
+  loadReleaseArtifactManifest,
+  validateReleaseArtifactManifest,
+} from '../artifacts/release-manifest';
 import { generateBlockMapFile } from '../build/blockmap';
+import { loadBunletConfig, loadPackageJson, type BunletConfig } from '../config';
 
 export interface PublishOptions {
   github?: boolean;
   s3?: boolean;
   dryRun?: boolean;
   releaseNotes?: string;
-}
-
-interface BunletConfig {
-  package?: {
-    name?: string;
-    version?: string;
-  };
-  publish?: {
-    provider?: 'github' | 's3' | 'generic';
-    owner?: string;
-    repo?: string;
-    token?: string;
-    bucket?: string;
-    region?: string;
-    url?: string;
-  };
 }
 
 interface ReleaseFile {
@@ -43,11 +32,29 @@ interface ReleaseFile {
  */
 export async function publishCommand(options: PublishOptions): Promise<void> {
   const root = process.cwd();
-  const config = await loadConfig(root);
+  const config = await loadBunletConfig(root);
   const packageJson = await loadPackageJson(root);
+  const releaseManifest = loadReleaseArtifactManifest(path.resolve(root, 'release'));
 
-  const appName = config.package?.name || packageJson.name || path.basename(root);
-  const appVersion = config.package?.version || packageJson.version || '1.0.0';
+  if (releaseManifest) {
+    const releaseManifestErrors = validateReleaseArtifactManifest(
+      path.resolve(root, 'release'),
+      releaseManifest
+    );
+    if (releaseManifestErrors.length > 0) {
+      console.error('\n  Error: Release artifact manifest is invalid.');
+      for (const error of releaseManifestErrors) {
+        console.error(`  - ${error}`);
+      }
+      console.error('');
+      process.exit(1);
+    }
+  }
+
+  const appName =
+    config.package?.name || releaseManifest?.app.name || packageJson.name || path.basename(root);
+  const appVersion =
+    config.package?.version || releaseManifest?.app.version || packageJson.version || '1.0.0';
   const releaseDir = path.resolve(root, 'release');
 
   console.log('\n  Bunlet Publish\n');
@@ -62,7 +69,9 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   // Find release files
-  const releaseFiles = await findReleaseFiles(releaseDir, appVersion);
+  const releaseFiles = releaseManifest
+    ? await loadReleaseFilesFromManifest(releaseDir)
+    : await findReleaseFiles(releaseDir, appVersion);
 
   if (releaseFiles.length === 0) {
     console.error('\n  Error: No release files found.\n');
@@ -176,6 +185,40 @@ async function findReleaseFiles(
         });
       }
     }
+  }
+
+  return files;
+}
+
+async function loadReleaseFilesFromManifest(releaseDir: string): Promise<ReleaseFile[]> {
+  const releaseManifest = loadReleaseArtifactManifest(releaseDir);
+  if (!releaseManifest) {
+    return [];
+  }
+
+  const files: ReleaseFile[] = [];
+  for (const artifact of releaseManifest.artifacts) {
+    if (artifact.kind !== 'file') {
+      continue;
+    }
+
+    const ext = path.extname(artifact.name).toLowerCase();
+    if (!['.dmg', '.pkg', '.zip', '.exe', '.msi', '.appimage', '.deb', '.rpm'].includes(ext)) {
+      continue;
+    }
+
+    const filePath = path.join(releaseDir, artifact.path);
+    if (!fs.existsSync(filePath)) {
+      continue;
+    }
+
+    const stat = fs.statSync(filePath);
+    files.push({
+      name: artifact.name,
+      path: filePath,
+      size: stat.size,
+      sha512: await calculateSha512(filePath),
+    });
   }
 
   return files;
@@ -475,46 +518,6 @@ function getContentType(filename: string): string {
     '.blockmap': 'application/octet-stream',
   };
   return types[ext] || 'application/octet-stream';
-}
-
-/**
- * Load bunlet config
- */
-async function loadConfig(root: string): Promise<BunletConfig> {
-  const configFiles = ['bunlet.config.ts', 'bunlet.config.js', 'bunlet.config.json'];
-
-  for (const configFile of configFiles) {
-    const configPath = path.join(root, configFile);
-    if (fs.existsSync(configPath)) {
-      try {
-        if (configFile.endsWith('.json')) {
-          return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        } else {
-          const module = await import(configPath);
-          return module.default || module;
-        }
-      } catch {
-        // Continue to next file
-      }
-    }
-  }
-
-  return {};
-}
-
-/**
- * Load package.json
- */
-async function loadPackageJson(root: string): Promise<Record<string, unknown>> {
-  const packageJsonPath = path.join(root, 'package.json');
-  if (fs.existsSync(packageJsonPath)) {
-    try {
-      return JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    } catch {
-      return {};
-    }
-  }
-  return {};
 }
 
 /**

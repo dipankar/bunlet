@@ -3,7 +3,10 @@ use napi_derive::napi;
 use std::path::PathBuf;
 use tao::dpi::{LogicalPosition, LogicalSize};
 
-use crate::{next_window_id, PendingWindow, PENDING_WINDOWS, WINDOWS};
+use crate::{
+    dispatch_navigation_event, dispatch_window_event, dispatch_window_title_event, next_window_id,
+    PendingWindow, PENDING_WINDOWS, WINDOWS,
+};
 
 /// Window creation options
 #[napi(object)]
@@ -76,6 +79,7 @@ pub fn load_url(window_id: u32, url: String) -> Result<()> {
             .webview
             .load_url(&url)
             .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+        dispatch_navigation_event("web-contents-navigation", window_id, Some(&url));
         return Ok(());
     }
 
@@ -87,6 +91,7 @@ pub fn load_url(window_id: u32, url: String) -> Result<()> {
     for pw in pending.iter_mut() {
         if pw.id == window_id {
             pw.url = Some(url.clone());
+            dispatch_navigation_event("web-contents-navigation", window_id, Some(&url));
             return Ok(());
         }
     }
@@ -140,6 +145,7 @@ pub fn load_html(window_id: u32, html: String) -> Result<()> {
         .webview
         .load_url(&format!("data:text/html,{}", urlencoding::encode(&html)))
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    dispatch_navigation_event("web-contents-navigation", window_id, None);
 
     Ok(())
 }
@@ -173,6 +179,7 @@ pub fn hide_window(window_id: u32) -> Result<()> {
 pub fn close_window(window_id: u32) -> Result<()> {
     let mut windows = WINDOWS.lock();
     windows.remove(&window_id);
+    dispatch_window_event("window-closed", window_id);
     Ok(())
 }
 
@@ -300,6 +307,7 @@ pub fn set_window_title(window_id: u32, title: String) -> Result<()> {
         .ok_or_else(|| Error::new(Status::InvalidArg, format!("Window {} not found", window_id)))?;
 
     state.window.set_title(&title);
+    dispatch_window_title_event("window-title-updated", window_id, &title);
     Ok(())
 }
 
@@ -414,6 +422,7 @@ pub fn webview_go_back(window_id: u32) -> Result<()> {
         .webview
         .evaluate_script("window.history.back()")
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    dispatch_navigation_event("web-contents-history-back", window_id, None);
     Ok(())
 }
 
@@ -429,6 +438,7 @@ pub fn webview_go_forward(window_id: u32) -> Result<()> {
         .webview
         .evaluate_script("window.history.forward()")
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    dispatch_navigation_event("web-contents-history-forward", window_id, None);
     Ok(())
 }
 
@@ -444,6 +454,7 @@ pub fn webview_reload(window_id: u32) -> Result<()> {
         .webview
         .evaluate_script("window.location.reload()")
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    dispatch_navigation_event("web-contents-navigation", window_id, None);
     Ok(())
 }
 

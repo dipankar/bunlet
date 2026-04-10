@@ -4,10 +4,9 @@
  * Starts the development server with HMR support.
  */
 
-import * as path from 'path';
-import * as fs from 'fs';
 import { DevServer } from '../dev/server';
 import { MainWatcher } from '../dev/main-watcher';
+import { loadBunletConfig } from '../config';
 
 interface DevOptions {
   port: string;
@@ -18,26 +17,12 @@ interface DevOptions {
   webview?: string;
 }
 
-interface BunletConfig {
-  main?: string;
-  renderer?: {
-    root?: string;
-    index?: string;
-  };
-  build?: {
-    outDir?: string;
-  };
-  webview?: {
-    engine?: 'system' | 'cef';
-  };
-}
-
 /**
  * Start development mode
  */
 export async function devCommand(options: DevOptions): Promise<void> {
   const root = process.cwd();
-  const config = await loadConfig(root);
+  const config = await loadBunletConfig(root);
   const webviewEngine = options.webview || config.webview?.engine || 'system';
   if (webviewEngine !== 'system' && webviewEngine !== 'cef') {
     throw new Error(`Unsupported webview engine: ${webviewEngine}`);
@@ -97,44 +82,4 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.error('Failed to start dev server:', error);
     process.exit(1);
   }
-}
-
-/**
- * Load bunlet config
- */
-async function loadConfig(root: string): Promise<BunletConfig> {
-  const configFiles = [
-    'bunlet.config.ts',
-    'bunlet.config.js',
-    'bunlet.config.mjs',
-    'bunlet.config.json',
-  ];
-
-  for (const configFile of configFiles) {
-    const configPath = path.join(root, configFile);
-
-    if (fs.existsSync(configPath)) {
-      try {
-        if (configFile.endsWith('.json')) {
-          const content = fs.readFileSync(configPath, 'utf-8');
-          return JSON.parse(content);
-        } else {
-          // Use dynamic import for JS/TS config
-          const module = await import(configPath);
-          return module.default || module;
-        }
-      } catch (error) {
-        console.warn(`Warning: Failed to load ${configFile}:`, error);
-      }
-    }
-  }
-
-  // Return defaults if no config found
-  return {
-    main: 'main.ts',
-    renderer: {
-      root: 'renderer',
-      index: 'renderer/index.html',
-    },
-  };
 }

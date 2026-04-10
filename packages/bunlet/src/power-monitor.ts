@@ -38,7 +38,7 @@
  */
 
 import { EventEmitter } from 'events';
-import native from './native/bindings';
+import { native } from './runtime';
 
 /**
  * Battery information

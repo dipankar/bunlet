@@ -9,14 +9,53 @@ import { app, BrowserWindow, z } from 'bunlet';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
+let currentSettings = { theme: 'light', fontSize: 14 };
 
 // Register IPC handlers before app is ready
 app.handle('get-settings', z.object({}), async () => {
-  return { theme: 'light', fontSize: 14 };
+  return currentSettings;
 });
 
-// Note: get-displays handler removed due to screen API Linux limitation
-// The screen API causes a GTK/D-Bus conflict with TAO's event loop
+app.handle(
+  'save-settings',
+  z.object({ theme: z.string(), fontSize: z.number() }),
+  async (params) => {
+    currentSettings = { theme: params.theme, fontSize: params.fontSize };
+    mainWindow?.webContents.send('settings-changed', currentSettings);
+    return { success: true };
+  }
+);
+
+app.handle('open-settings', z.object({}), async () => {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return { success: true };
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 400,
+    height: 350,
+    title: 'Settings',
+    parent: mainWindow ?? undefined,
+    modal: false,
+  });
+
+  settingsWindow.loadFile(path.join(import.meta.dir, 'settings.html'));
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+
+  return { success: true };
+});
+
+app.handle('close-settings', z.object({}), async () => {
+  if (settingsWindow) {
+    settingsWindow.close();
+  }
+  return { success: true };
+});
 
 app.on('window-all-closed', () => {
   app.quit();

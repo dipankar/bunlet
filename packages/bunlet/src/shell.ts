@@ -5,6 +5,7 @@
  * files, and showing items in folder.
  */
 
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /**
@@ -31,6 +32,7 @@ export const shell = {
    * @param options - Additional options
    */
   async openExternal(url: string, _options?: OpenExternalOptions): Promise<void> {
+    assertRuntimeCapability('clipboard', 'shell.openExternal()');
     await native.shellOpenExternal(url);
   },
 
@@ -40,6 +42,7 @@ export const shell = {
    * @returns Error message if failed, empty string on success
    */
   async openPath(path: string): Promise<string> {
+    assertRuntimeCapability('clipboard', 'shell.openPath()');
     return await native.shellOpenPath(path);
   },
 
@@ -48,6 +51,7 @@ export const shell = {
    * @param fullPath - Full path to the item
    */
   showItemInFolder(fullPath: string): void {
+    assertRuntimeCapability('clipboard', 'shell.showItemInFolder()');
     native.shellShowItemInFolder(fullPath);
   },
 
@@ -56,6 +60,7 @@ export const shell = {
    * @param path - Path to the item to trash
    */
   async trashItem(path: string): Promise<void> {
+    assertRuntimeCapability('clipboard', 'shell.trashItem()');
     await native.shellTrashItem(path);
   },
 

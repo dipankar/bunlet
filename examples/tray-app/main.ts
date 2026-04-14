@@ -181,11 +181,10 @@ function showNotification(
     showWindow();
   });
 
-  notification.on('action', (actionIndex: number) => {
+  notification.on('action', (_event, actionIndex) => {
     if (actionIndex === 0) {
       showWindow();
     }
-    // Action 1 (Dismiss) just closes the notification
   });
 
   notification.show();

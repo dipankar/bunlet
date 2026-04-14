@@ -4,6 +4,7 @@
  * Provides cross-platform global keyboard shortcuts.
  */
 
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /** Map of accelerator -> callback */
@@ -20,6 +21,7 @@ let initialized = false;
  */
 function ensureInitialized(): void {
   if (initialized) return;
+  assertRuntimeCapability('globalShortcuts', 'globalShortcut');
   initialized = true;
 
   // Initialize native shortcuts

@@ -18,6 +18,15 @@ import type {
 import type { UpdateProvider } from './updater/providers/base';
 import { GitHubProvider } from './updater/providers/github';
 import { GenericProvider } from './updater/providers/generic';
+import { BaseProvider } from './updater/providers/base';
+
+/**
+ * Shell-quote a string for safe use in shell commands.
+ * Wraps the string in single quotes and escapes any embedded single quotes.
+ */
+function shellQuote(str: string): string {
+  return `'${str.replace(/'/g, "'\\''")}'`;
+}
 
 /**
  * AutoUpdater class
@@ -131,7 +140,7 @@ export class AutoUpdater extends EventEmitter {
       fs.mkdirSync(this.updateDir, { recursive: true });
     }
 
-    const file = this.updateInfo.files[0];
+    const file = this.updateInfo!.files[0];
     if (!file) {
       throw new Error('No update file available');
     }
@@ -147,6 +156,9 @@ export class AutoUpdater extends EventEmitter {
           this.emit('download-progress', progress);
         }
       );
+
+      // Verify artifact integrity against manifest hashes before accepting the download
+      await this.verifyUpdateIntegrity(destPath, file);
 
       this.downloadedPath = destPath;
       this.emit('update-downloaded', this.updateInfo);
@@ -167,6 +179,29 @@ export class AutoUpdater extends EventEmitter {
       throw new Error('No update downloaded');
     }
 
+    // Re-verify integrity before installation
+    const file = this.updateInfo?.files[0];
+    if (file?.sha512) {
+      try {
+        const hash = this.calculateSHA512(this.downloadedPath);
+        if (hash !== file.sha512) {
+          throw new Error(
+            `Update integrity check failed before install.\n` +
+            `Expected: ${file.sha512}\n` +
+            `Actual: ${hash}\n` +
+            `File: ${this.downloadedPath}\n` +
+            `The download may have been tampered with. Aborting installation.`
+          );
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('integrity check failed')) {
+          throw err;
+        }
+        // If we can't verify (e.g. no crypto), warn but proceed
+        console.warn('[bunlet] Warning: Could not re-verify update integrity before install:', err);
+      }
+    }
+
     // Platform-specific installation
     const platform = process.platform;
     const downloadedPath = this.downloadedPath;
@@ -178,6 +213,51 @@ export class AutoUpdater extends EventEmitter {
     } else if (platform === 'linux') {
       this.installLinux(downloadedPath, isSilent);
     }
+  }
+
+  /**
+   * Verify the downloaded file's integrity against the manifest hash
+   */
+  private async verifyUpdateIntegrity(
+    filePath: string,
+    fileInfo: { sha512?: string; url: string }
+  ): Promise<void> {
+    if (!fileInfo.sha512) {
+      console.warn('[bunlet] Update manifest has no sha512 hash - skipping integrity verification');
+      return;
+    }
+
+    const hash = this.calculateSHA512(filePath);
+    if (hash !== fileInfo.sha512) {
+      // Delete the corrupted file
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw new Error(
+        `Update integrity verification failed!\n` +
+        `Expected SHA-512: ${fileInfo.sha512}\n` +
+        `Actual SHA-512:   ${hash}\n` +
+        `File: ${path.basename(fileInfo.url)}\n` +
+        `\n` +
+        `The downloaded file does not match the manifest hash. ` +
+        `This could mean the download was corrupted or tampered with. ` +
+        `The file has been deleted for safety.`
+      );
+    }
+
+    this.emit('update-verified', { file: path.basename(fileInfo.url), hash });
+  }
+
+  /**
+   * Calculate SHA-512 hash of a file
+   */
+  private calculateSHA512(filePath: string): string {
+    const data = fs.readFileSync(filePath);
+    const hasher = new Bun.CryptoHasher('sha512');
+    hasher.update(data);
+    return hasher.digest('hex');
   }
 
   /**
@@ -243,23 +323,11 @@ export class AutoUpdater extends EventEmitter {
   }
 
   /**
-   * Compare two versions
+   * Compare two versions using shared semver-lite logic.
+   * Delegates to BaseProvider.compareVersions for consistency with update providers.
    */
   private compareVersions(a: string, b: string): number {
-    const partsA = a.replace(/^v/, '').split(/[.-]/).map((p) => parseInt(p, 10) || 0);
-    const partsB = b.replace(/^v/, '').split(/[.-]/).map((p) => parseInt(p, 10) || 0);
-
-    const maxLength = Math.max(partsA.length, partsB.length);
-
-    for (let i = 0; i < maxLength; i++) {
-      const numA = partsA[i] || 0;
-      const numB = partsB[i] || 0;
-
-      if (numA > numB) return 1;
-      if (numA < numB) return -1;
-    }
-
-    return 0;
+    return versionComparer.compareVersions(a, b);
   }
 
   /**
@@ -269,37 +337,60 @@ export class AutoUpdater extends EventEmitter {
     const ext = path.extname(updatePath).toLowerCase();
 
     if (ext === '.dmg') {
-      // Mount DMG and copy app
-      const script = `
-        hdiutil attach "${updatePath}" -nobrowse -quiet
-        # Find mounted volume and app
-        VOLUME=$(hdiutil info | grep -o '/Volumes/[^"]*' | head -1)
-        APP=$(ls "$VOLUME"/*.app 2>/dev/null | head -1)
-        if [ -n "$APP" ]; then
-          # Quit current app, copy new app, restart
-          osascript -e 'tell application "System Events" to quit application "${process.title}"' 2>/dev/null || true
-          rm -rf "/Applications/$(basename "$APP")"
-          cp -R "$APP" /Applications/
-          hdiutil detach "$VOLUME" -quiet
-          open "/Applications/$(basename "$APP")"
-        fi
-      `;
+      const mountResults = require('child_process').execSync(
+        `hdiutil attach ${shellQuote(updatePath)} -nobrowse -quiet`,
+        { encoding: 'utf-8', stdio: isSilent ? 'ignore' : 'pipe' }
+      );
 
-      const { execSync } = require('child_process');
-      execSync(script, { stdio: isSilent ? 'ignore' : 'inherit' });
+      const volumeMatch = mountResults.match(/\/Volumes\/[^\n]+/);
+      if (!volumeMatch) {
+        throw new Error('Failed to mount DMG: could not find volume path');
+      }
+      const volume = volumeMatch[0].trim();
+
+      try {
+        const apps = fs.readdirSync(volume).filter((f) => f.endsWith('.app'));
+        if (apps.length > 0) {
+          const appPath = path.join(volume, apps[0]);
+          const destPath = `/Applications/${apps[0]}`;
+          if (fs.existsSync(destPath)) {
+            fs.rmSync(destPath, { recursive: true, force: true });
+          }
+          fs.cpSync(appPath, destPath, { recursive: true });
+
+          try {
+            require('child_process').execSync(
+              `osascript -e 'tell application "System Events" to quit application ${shellQuote(process.title || 'bunlet')}'`,
+              { stdio: isSilent ? 'ignore' : 'inherit' }
+            );
+          } catch {
+            // Ignore failure to quit the current app
+          }
+
+          require('child_process').execSync(`open ${shellQuote(destPath)}`, {
+            stdio: isSilent ? 'ignore' : 'inherit',
+          });
+        }
+      } finally {
+        require('child_process').execSync(`hdiutil detach ${shellQuote(volume)} -quiet`, {
+          stdio: 'ignore',
+        });
+      }
     } else if (ext === '.zip') {
-      // Unzip and copy app
-      const { execSync } = require('child_process');
+      const { execSync } = require('child_process') as typeof import('child_process');
       const tempDir = path.join(this.updateDir, 'unzip');
 
-      execSync(`unzip -o "${updatePath}" -d "${tempDir}"`, { stdio: 'ignore' });
+      execSync(`unzip -o ${shellQuote(updatePath)} -d ${shellQuote(tempDir)}`, { stdio: 'ignore' });
 
       const apps = fs.readdirSync(tempDir).filter((f) => f.endsWith('.app'));
       if (apps.length > 0) {
         const appPath = path.join(tempDir, apps[0]);
-        execSync(`rm -rf "/Applications/${apps[0]}"`, { stdio: 'ignore' });
-        execSync(`cp -R "${appPath}" /Applications/`, { stdio: 'ignore' });
-        execSync(`open "/Applications/${apps[0]}"`, { stdio: 'ignore' });
+        const destPath = `/Applications/${apps[0]}`;
+        if (fs.existsSync(destPath)) {
+          fs.rmSync(destPath, { recursive: true, force: true });
+        }
+        fs.cpSync(appPath, destPath, { recursive: true });
+        execSync(`open ${shellQuote(destPath)}`, { stdio: 'ignore' });
       }
     }
 
@@ -311,22 +402,19 @@ export class AutoUpdater extends EventEmitter {
    */
   private installWindows(updatePath: string, isSilent: boolean, isForceRunAfter: boolean): void {
     const ext = path.extname(updatePath).toLowerCase();
-    const { execSync, spawn } = require('child_process');
+    const { spawn } = require('child_process') as typeof import('child_process');
 
     if (ext === '.exe') {
-      // Run installer
       const args = isSilent ? ['/S'] : [];
       if (isForceRunAfter) {
         args.push('/run');
       }
 
-      // Spawn installer and exit
       spawn(updatePath, args, {
         detached: true,
         stdio: 'ignore',
       }).unref();
     } else if (ext === '.msi') {
-      // Run MSI installer
       const args = ['msiexec', '/i', updatePath];
       if (isSilent) {
         args.push('/quiet');
@@ -346,21 +434,29 @@ export class AutoUpdater extends EventEmitter {
    */
   private installLinux(updatePath: string, isSilent: boolean): void {
     const ext = path.extname(updatePath).toLowerCase();
-    const { execSync, spawn } = require('child_process');
 
     if (ext === '.appimage') {
       // Replace AppImage
       const currentPath = process.execPath;
       fs.chmodSync(updatePath, 0o755);
-      fs.renameSync(updatePath, currentPath);
+      const backupPath = currentPath + '.bak';
+      try {
+        fs.renameSync(currentPath, backupPath);
+        fs.renameSync(updatePath, currentPath);
+      } catch {
+        // If rename fails (e.g. across filesystems), use copy
+        fs.copyFileSync(updatePath, currentPath);
+        try { fs.unlinkSync(updatePath); } catch { /* ignore */ }
+      }
 
       // Restart
+      const { spawn } = require('child_process') as typeof import('child_process');
       spawn(currentPath, [], {
         detached: true,
         stdio: 'ignore',
       }).unref();
     } else if (ext === '.deb') {
-      // Install deb package
+      const { spawn } = require('child_process') as typeof import('child_process');
       spawn('sudo', ['dpkg', '-i', updatePath], {
         detached: true,
         stdio: isSilent ? 'ignore' : 'inherit',
@@ -397,3 +493,14 @@ export class AutoUpdater extends EventEmitter {
  * Singleton instance
  */
 export const autoUpdater = new AutoUpdater();
+
+/**
+ * Shared version comparer — a minimal BaseProvider subclass used only
+ * for the compareVersions method so AutoUpdater doesn't duplicate the logic.
+ */
+class VersionComparer extends BaseProvider {
+  constructor() { super(); }
+  async getLatestVersion() { return null; }
+  getDownloadUrl() { return ''; }
+}
+const versionComparer = new VersionComparer();

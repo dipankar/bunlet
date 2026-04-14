@@ -6,6 +6,12 @@ export interface NativeWindowEvent {
   title?: string;
   url?: string;
   bounds?: Rectangle;
+  scaleFactor?: number;
+  theme?: string;
+  files?: string[];
+  preloadPath?: string;
+  errorMessage?: string;
+  errorStack?: string;
 }
 
 export interface NativeWindowEventTarget {
@@ -79,6 +85,39 @@ export function applyNativeWindowEvent(
       if (!target.isDestroyed()) {
         target.markClosed();
       }
+      break;
+    case 'window-scale-factor-changed':
+      if (typeof event.scaleFactor === 'number') {
+        target.emit('scale-factor-changed', event.scaleFactor);
+      }
+      break;
+    case 'window-theme-changed':
+      if (typeof event.theme === 'string') {
+        target.emit('theme-changed', event.theme);
+      }
+      break;
+    case 'window-file-drop':
+      if (Array.isArray(event.files)) {
+        target.emit('file-drop', event.files);
+      }
+      break;
+    case 'window-file-hover':
+      if (Array.isArray(event.files)) {
+        target.emit('file-drag-enter', event.files);
+      }
+      break;
+    case 'window-file-hover-cancelled':
+      target.emit('file-drag-leave');
+      break;
+    case 'preload-success':
+      target.emit('preload-success', event.preloadPath);
+      break;
+    case 'preload-error':
+      target.emit('preload-error', {
+        path: event.preloadPath,
+        message: event.errorMessage ?? 'Unknown preload error',
+        stack: event.errorStack,
+      });
       break;
     default:
       break;

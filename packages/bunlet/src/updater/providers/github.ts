@@ -71,16 +71,86 @@ export class GitHubProvider extends BaseProvider {
    * Get the download URL for a file
    */
   getDownloadUrl(file: { url: string }): string {
-    // For private repos, we need to use the API URL with token
-    if (this.isPrivate && this.token) {
-      // Convert browser_download_url to API URL
-      const match = file.url.match(/\/releases\/download\/([^/]+)\/(.+)$/);
-      if (match) {
-        const [, tag, filename] = match;
-        return `${this.apiBase}/repos/${this.owner}/${this.repo}/releases/assets/${filename}`;
+    return file.url;
+  }
+
+  /**
+   * Override download to include Authorization header for private repos
+   */
+  override async downloadUpdate(
+    info: UpdateInfo,
+    destPath: string,
+    onProgress?: (progress: import('../types').ProgressInfo) => void
+  ): Promise<string> {
+    const file = this.findPlatformFile(info.files);
+    if (!file) {
+      throw new Error(`No update file found for ${this.platform}-${this.arch}`);
+    }
+
+    const url = this.getDownloadUrl(file);
+    const headers: Record<string, string> = {
+      'User-Agent': 'Bunlet-AutoUpdater',
+    };
+
+    if (this.token) {
+      headers['Authorization'] = `token ${this.token}`;
+      // For private repos, also set Accept to get the binary content
+      if (this.isPrivate) {
+        headers['Accept'] = 'application/octet-stream';
       }
     }
-    return file.url;
+
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download update: ${response.status} ${response.statusText}`);
+    }
+
+    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error('Failed to get response reader');
+    }
+
+    const chunks: Uint8Array[] = [];
+    let transferred = 0;
+    let lastUpdate = Date.now();
+    let lastTransferred = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      chunks.push(value);
+      transferred += value.length;
+
+      const now = Date.now();
+      if (onProgress && now - lastUpdate >= 100) {
+        const elapsed = (now - lastUpdate) / 1000;
+        const bytesPerSecond = (transferred - lastTransferred) / elapsed;
+
+        onProgress({
+          total: contentLength || file.size,
+          transferred,
+          percent: contentLength ? (transferred / contentLength) * 100 : 0,
+          bytesPerSecond,
+        });
+
+        lastUpdate = now;
+        lastTransferred = transferred;
+      }
+    }
+
+    const data = new Uint8Array(transferred);
+    let offset = 0;
+    for (const chunk of chunks) {
+      data.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    await Bun.write(destPath, data);
+    return destPath;
   }
 
   /**

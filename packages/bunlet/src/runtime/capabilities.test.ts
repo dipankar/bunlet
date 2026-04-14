@@ -3,22 +3,33 @@ import type { RuntimeCapabilities } from './types';
 import { assertCapability, createCapabilityErrorMessage, hasCapability } from './capabilities';
 
 function backendInfo(engine: 'system' | 'cef', overrides: Partial<RuntimeCapabilities> = {}) {
+  const systemBase: RuntimeCapabilities = {
+    windowManagement: true,
+    multiWindow: true,
+    ipcInvoke: true,
+    mainToRendererPush: true,
+    executeJavaScript: true,
+    devtools: true,
+    navigation: true,
+    preloadScripts: true,
+    contextIsolation: true,
+    sessionPartitions: true,
+    cookies: true,
+    authoritativeGetters: false,
+    executeJavaScriptReturns: false,
+    dialogs: true,
+    tray: true,
+    globalShortcuts: true,
+    notifications: true,
+    powerMonitor: true,
+    screen: true,
+    clipboard: true,
+    fileDrop: true,
+  };
+
   return {
     engine,
-    capabilities: {
-      windowManagement: true,
-      multiWindow: true,
-      ipcInvoke: true,
-      mainToRendererPush: true,
-      executeJavaScript: true,
-      devtools: true,
-      navigation: true,
-      preloadScripts: true,
-      contextIsolation: true,
-      sessionPartitions: true,
-      cookies: true,
-      ...overrides,
-    },
+    capabilities: { ...systemBase, ...overrides },
   };
 }
 
@@ -43,6 +54,36 @@ describe('runtime capability helpers', () => {
 
     expect(() => assertCapability(backend, 'devtools', 'webContents.openDevTools()')).toThrow(
       'webContents.openDevTools()'
+    );
+  });
+
+  test('system webview defaults have authoritativeGetters = false', () => {
+    const backend = backendInfo('system');
+    expect(hasCapability(backend, 'authoritativeGetters')).toBe(false);
+    expect(hasCapability(backend, 'executeJavaScriptReturns')).toBe(false);
+  });
+
+  test('CEF backend has authoritativeGetters and executeJavaScriptReturns', () => {
+    const backend = backendInfo('cef', { authoritativeGetters: true, executeJavaScriptReturns: true });
+    expect(hasCapability(backend, 'authoritativeGetters')).toBe(true);
+    expect(hasCapability(backend, 'executeJavaScriptReturns')).toBe(true);
+  });
+
+  test('all platform APIs are capability-gated', () => {
+    const backend = backendInfo('system');
+    const requiredCaps: Array<keyof RuntimeCapabilities> = [
+      'dialogs', 'tray', 'globalShortcuts', 'notifications',
+      'powerMonitor', 'screen', 'clipboard', 'fileDrop',
+    ];
+    for (const cap of requiredCaps) {
+      expect(hasCapability(backend, cap)).toBe(true);
+    }
+  });
+
+  test('disabling a capability throws on access', () => {
+    const backend = backendInfo('system', { dialogs: false });
+    expect(() => assertCapability(backend, 'dialogs', 'dialog.showOpenDialog()')).toThrow(
+      'dialog.showOpenDialog()'
     );
   });
 });

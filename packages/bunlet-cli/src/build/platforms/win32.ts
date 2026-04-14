@@ -191,7 +191,7 @@ export async function createWin32Zip(
         resolve({ success: true, path: zipPath });
       });
 
-      archive.on('error', (err) => {
+      archive.on('error', (err: Error) => {
         resolve({ success: false, error: err.message });
       });
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadBunletConfig, loadPackageJson } from './index';
+import { loadBunletConfig, loadPackageJson, loadBunletConfigWithWarnings } from './index';
 
 const tempDirs: string[] = [];
 
@@ -62,5 +62,44 @@ describe('CLI config loader', () => {
     expect(packageJson.version).toBe('1.2.3');
     expect(packageJson.description).toBe('fixture app');
     expect(packageJson.author).toBe('fixture author');
+  });
+
+  test('validates config with Zod schema', async () => {
+    const root = createTempProject();
+    fs.writeFileSync(
+      path.join(root, 'bunlet.config.json'),
+      JSON.stringify({
+        webview: { engine: 'invalid-engine' },
+      })
+    );
+
+    expect(loadBunletConfig(root)).rejects.toThrow();
+  });
+
+  test('returns warnings for cef engine without cef options', async () => {
+    const root = createTempProject();
+    fs.writeFileSync(
+      path.join(root, 'bunlet.config.json'),
+      JSON.stringify({
+        webview: { engine: 'cef' },
+      })
+    );
+
+    const { config, warnings } = await loadBunletConfigWithWarnings(root);
+    expect(config.webview?.engine).toBe('cef');
+    expect(warnings.some((w) => w.includes('cef'))).toBe(true);
+  });
+
+  test('returns warnings for non-semver version', async () => {
+    const root = createTempProject();
+    fs.writeFileSync(
+      path.join(root, 'bunlet.config.json'),
+      JSON.stringify({
+        package: { version: 'not-semver' },
+      })
+    );
+
+    const { warnings } = await loadBunletConfigWithWarnings(root);
+    expect(warnings.some((w) => w.includes('semver'))).toBe(true);
   });
 });

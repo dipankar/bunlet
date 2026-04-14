@@ -20,6 +20,7 @@
  */
 
 import type { Rectangle } from './types';
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /**
@@ -103,6 +104,7 @@ export const screen = {
    * @returns The primary display information
    */
   getPrimaryDisplay(): Display {
+    assertRuntimeCapability('screen', 'screen.getPrimaryDisplay()');
     const info = native.getPrimaryDisplay();
     return toDisplay(info);
   },
@@ -112,6 +114,7 @@ export const screen = {
    * @returns Array of all display information
    */
   getAllDisplays(): Display[] {
+    assertRuntimeCapability('screen', 'screen.getAllDisplays()');
     const infos = native.getAllDisplays();
     return infos.map(toDisplay);
   },
@@ -169,6 +172,7 @@ export const screen = {
    * @returns The cursor position
    */
   getCursorScreenPoint(): Point {
+    assertRuntimeCapability('screen', 'screen.getCursorScreenPoint()');
     const point = native.getCursorScreenPoint();
     return { x: point.x, y: point.y };
   },
@@ -178,9 +182,12 @@ export const screen = {
    * @returns The menu bar height in pixels
    */
   getMenuBarHeight(): number {
-    // TAO doesn't expose this directly
-    // On macOS this would typically be ~22-24 pixels
-    // For now return 0 as a cross-platform fallback
+    if (process.platform === 'darwin') {
+      // macOS menu bar is typically 25 pixels (was 22 before Big Sur)
+      // We return the standard height; apps can query this at runtime
+      // if needed. The exact height depends on display scaling.
+      return 25;
+    }
     return 0;
   },
 };

@@ -33,6 +33,9 @@ function createWindow() {
     width: 900,
     height: 600,
     title: 'File Browser',
+    webPreferences: {
+      preload: path.join(import.meta.dir, 'preload.ts'),
+    },
   });
 
   // Note: center() is disabled on Linux due to screen API limitations
@@ -128,7 +131,7 @@ function readDirectory(dirPath: string) {
 app.handle(
   'get-directory',
   z.object({ path: z.string().optional() }),
-  async (_, params) => {
+  async (params) => {
     const dirPath = params?.path || currentPath;
     return readDirectory(dirPath);
   }
@@ -138,10 +141,8 @@ app.handle(
 app.handle(
   'navigate-to',
   z.object({ path: z.string() }),
-  async (_, params) => {
-    // Add to history
+  async (params) => {
     if (historyIndex === -1 || history[historyIndex] !== params.path) {
-      // Remove forward history
       history.splice(historyIndex + 1);
       history.push(params.path);
       historyIndex = history.length - 1;
@@ -183,7 +184,7 @@ app.handle('navigate-up', z.object({}), async () => {
 
 // Open folder dialog
 app.handle('open-folder-dialog', z.object({}), async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(null, {
     properties: ['openDirectory'],
     title: 'Select Folder',
   });
@@ -202,17 +203,16 @@ app.handle('open-folder-dialog', z.object({}), async () => {
 app.handle(
   'open-file',
   z.object({ path: z.string() }),
-  async (_, params) => {
+  async (params) => {
     await shell.openPath(params.path);
     return { success: true };
   }
 );
 
-// Show file in system file manager
 app.handle(
   'show-in-folder',
   z.object({ path: z.string() }),
-  async (_, params) => {
+  async (params) => {
     shell.showItemInFolder(params.path);
     return { success: true };
   }
@@ -229,6 +229,13 @@ app.handle('get-nav-state', z.object({}), async () => {
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('before-quit', () => {
+  if (currentWatcher) {
+    currentWatcher.close();
+    currentWatcher = null;
+  }
 });
 
 // Wait for app to be ready

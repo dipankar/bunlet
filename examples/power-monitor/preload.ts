@@ -23,6 +23,6 @@ contextBridge.exposeInMainWorld('api', {
       timestamp: number;
     }) => void
   ) => {
-    ipcRenderer.on('power-event', (_, data) => callback(data));
+    ipcRenderer.on('power-event', (_event, data) => callback(data as { type: string; message: string; timestamp: number }));
   },
 });

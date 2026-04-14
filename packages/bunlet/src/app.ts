@@ -5,7 +5,8 @@
 import { EventEmitter } from 'events';
 import { z, ZodType } from 'zod';
 import type { NativeWindowEvent } from './windows/events';
-import type { PathName, IPCContext } from './types';
+import type { PathName, IPCContext, BunletEvent } from './types';
+import { createCloseEvent } from './windows/events';
 import * as os from 'os';
 import * as path from 'path';
 import { native } from './runtime';
@@ -272,10 +273,20 @@ class App extends EventEmitter {
   }
 
   /**
-   * Quit the application
+   * Quit the application.
+   *
+   * Emits `before-quit` first. If any listener calls
+   * `event.preventDefault()`, the quit is aborted.
+   * Otherwise emits `will-quit` and `quit`, then terminates.
    */
   quit(): void {
-    this.emit('before-quit');
+    const event: BunletEvent = createCloseEvent();
+    this.emit('before-quit', event);
+
+    if (event.defaultPrevented) {
+      return;
+    }
+
     this.emit('will-quit');
     this.emit('quit');
     native.quitApp();
@@ -286,6 +297,30 @@ class App extends EventEmitter {
    */
   exit(exitCode = 0): void {
     process.exit(exitCode);
+  }
+
+  /**
+   * Relaunch the application
+   *
+   * Quits the current instance and launches a new one with the same
+   * executable and arguments. On macOS, this will also re-activate
+   * the app via the dock.
+   */
+  relaunch(options?: { args?: string[]; execPath?: string }): void {
+    const execPath = options?.execPath ?? process.execPath;
+    const args = options?.args ?? process.argv.slice(1);
+
+    const { spawn } = require('child_process') as typeof import('child_process');
+
+    const child = spawn(execPath, args, {
+      detached: true,
+      stdio: 'ignore',
+      env: process.env,
+    });
+
+    child.unref();
+
+    this.quit();
   }
 
   /**

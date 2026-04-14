@@ -116,7 +116,7 @@ export const ipcRenderer = {
       throw new Error('bunlet IPC not available');
     }
 
-    return bunlet.invoke({ method: channel, params: args.length === 1 ? args[0] : args }) as Promise<T>;
+    return bunlet.invoke({ method: channel, params: args.length === 0 ? {} : args.length === 1 ? args[0] : args }) as Promise<T>;
   },
 
   /**

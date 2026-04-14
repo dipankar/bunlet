@@ -125,7 +125,8 @@ export type AutoUpdaterEvent =
   | 'update-available'
   | 'update-not-available'
   | 'download-progress'
-  | 'update-downloaded';
+  | 'update-downloaded'
+  | 'update-verified';
 
 /**
  * Event listener types
@@ -137,4 +138,5 @@ export interface AutoUpdaterEventMap {
   'update-not-available': (info: UpdateInfo) => void;
   'download-progress': (progress: ProgressInfo) => void;
   'update-downloaded': (info: UpdateInfo) => void;
+  'update-verified': (info: { file: string; hash: string }) => void;
 }

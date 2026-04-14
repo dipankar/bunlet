@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 [features]
 default = []
 devtools = []
+screen-tao-fallback = []
 
 [dependencies]
 # NAPI bindings for Bun/Node.js

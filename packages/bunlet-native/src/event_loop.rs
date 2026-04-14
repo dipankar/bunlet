@@ -8,7 +8,8 @@ use tao::event_loop::{ControlFlow, EventLoopBuilder};
 
 use crate::{
     create_window_in_loop, dispatch_app_event, dispatch_window_bounds_event, dispatch_window_event,
-    IpcMessage, PENDING_IPC, PENDING_WINDOWS, WindowBounds, WINDOWS,
+    dispatch_window_files_event, dispatch_window_scale_event, dispatch_window_theme_event,
+    IpcMessage, WindowBounds, PENDING_IPC, PENDING_WINDOWS, WINDOWS,
 };
 
 // Global event loop stored for run_return usage
@@ -58,9 +59,13 @@ pub fn init_event_loop() -> Result<()> {
                     }
                     if let Some(html) = &pending_window.html {
                         let encoded = urlencoding::encode(html);
-                        let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
+                        let _ = state
+                            .webview
+                            .load_url(&format!("data:text/html,{}", encoded));
                     }
-                    WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
+                    WINDOWS
+                        .lock()
+                        .insert(pending_window.id, SendWrapper::new(state));
                 }
                 Err(e) => {
                     eprintln!("Failed to create window {}: {}", pending_window.id, e);
@@ -133,9 +138,13 @@ pub fn run_event_loop() -> Result<()> {
                     }
                     if let Some(html) = &pending_window.html {
                         let encoded = urlencoding::encode(html);
-                        let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
+                        let _ = state
+                            .webview
+                            .load_url(&format!("data:text/html,{}", encoded));
                     }
-                    WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
+                    WINDOWS
+                        .lock()
+                        .insert(pending_window.id, SendWrapper::new(state));
                     window_all_closed_emitted = false;
                 }
                 Err(e) => {
@@ -152,16 +161,21 @@ pub fn run_event_loop() -> Result<()> {
         {
             let pending = PENDING_WINDOWS.lock().drain(..).collect::<Vec<_>>();
             for pending_window in pending {
-                match create_window_in_loop(pending_window.id, &pending_window.options, event_loop) {
+                match create_window_in_loop(pending_window.id, &pending_window.options, event_loop)
+                {
                     Ok(state) => {
                         if let Some(url) = &pending_window.url {
                             let _ = state.webview.load_url(url);
                         }
                         if let Some(html) = &pending_window.html {
                             let encoded = urlencoding::encode(html);
-                            let _ = state.webview.load_url(&format!("data:text/html,{}", encoded));
+                            let _ = state
+                                .webview
+                                .load_url(&format!("data:text/html,{}", encoded));
                         }
-                        WINDOWS.lock().insert(pending_window.id, SendWrapper::new(state));
+                        WINDOWS
+                            .lock()
+                            .insert(pending_window.id, SendWrapper::new(state));
                         window_all_closed_emitted = false;
                     }
                     Err(e) => {
@@ -179,7 +193,11 @@ pub fn run_event_loop() -> Result<()> {
             } => {
                 if let Some(id) = find_window_id_by_tao_id(window_id) {
                     dispatch_window_event(
-                        if focused { "window-focus" } else { "window-blur" },
+                        if focused {
+                            "window-focus"
+                        } else {
+                            "window-blur"
+                        },
                         id,
                     );
                 }
@@ -265,6 +283,75 @@ pub fn run_event_loop() -> Result<()> {
                         window_all_closed_emitted = true;
                     }
                     *control_flow = ControlFlow::Exit;
+                }
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::ScaleFactorChanged {
+                        scale_factor,
+                        new_inner_size,
+                    },
+                window_id,
+                ..
+            } => {
+                if let Some(id) = find_window_id_by_tao_id(window_id) {
+                    dispatch_window_scale_event("window-scale-factor-changed", id, scale_factor);
+                    // Also dispatch a resize since the inner size changed
+                    let position = WINDOWS
+                        .lock()
+                        .get(&id)
+                        .and_then(|state| state.window.outer_position().ok())
+                        .unwrap_or_default();
+                    dispatch_window_bounds_event(
+                        "window-resize",
+                        id,
+                        WindowBounds {
+                            x: position.x,
+                            y: position.y,
+                            width: new_inner_size.width,
+                            height: new_inner_size.height,
+                        },
+                    );
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::ThemeChanged(theme),
+                window_id,
+                ..
+            } => {
+                if let Some(id) = find_window_id_by_tao_id(window_id) {
+                    let theme_str = match theme {
+                        tao::window::Theme::Dark => "dark",
+                        tao::window::Theme::Light => "light",
+                        _ => "unknown",
+                    };
+                    dispatch_window_theme_event("window-theme-changed", id, theme_str);
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::DroppedFile(path),
+                window_id,
+                ..
+            } => {
+                if let Some(id) = find_window_id_by_tao_id(window_id) {
+                    dispatch_window_files_event(
+                        "window-file-drop",
+                        id,
+                        vec![path.to_string_lossy().to_string()],
+                    );
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::HoveredFile(path),
+                window_id,
+                ..
+            } => {
+                if let Some(id) = find_window_id_by_tao_id(window_id) {
+                    dispatch_window_files_event(
+                        "window-file-hover",
+                        id,
+                        vec![path.to_string_lossy().to_string()],
+                    );
                 }
             }
             _ => {}

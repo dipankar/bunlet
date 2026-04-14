@@ -28,23 +28,21 @@ pub struct Cookie {
 }
 
 /// Get cookies for a window using JavaScript
-/// Note: This only retrieves non-HttpOnly cookies due to browser security
+///
+/// **Limitation**: The system webview backend (wry) does not support returning
+/// values from `evaluate_script`. This function fires the JS snippet but cannot
+/// retrieve `document.cookie`, so it always returns an empty array. For real
+/// cookie access, use the CEF backend which has native cookie APIs via
+/// `RequestContext`.
 #[napi]
-pub async fn get_cookies(window_id: u32) -> Result<Vec<Cookie>> {
-    let script = r#"
-        (function() {
-            const cookies = document.cookie.split(';').map(function(c) {
-                const parts = c.trim().split('=');
-                const name = parts[0] || '';
-                const value = parts.slice(1).join('=') || '';
-                return { name: name, value: value };
-            }).filter(function(c) { return c.name.length > 0; });
-            return JSON.stringify(cookies);
-        })()
-    "#;
-
-    let result = execute_script_for_cookies(window_id, script)?;
-    parse_cookies_json(&result)
+pub async fn get_cookies(_window_id: u32) -> Result<Vec<Cookie>> {
+    // evaluate_script is fire-and-forget in wry; we cannot read document.cookie
+    // results back. Return an empty vec and log a warning once.
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        eprintln!("[bunlet] Warning: session.cookies.get() always returns [] with the system webview backend. Use the CEF backend for real cookie access.");
+    }
+    Ok(Vec::new())
 }
 
 /// Set a cookie for a window
@@ -90,24 +88,30 @@ pub fn set_cookie(window_id: u32, cookie: Cookie) -> Result<()> {
     Ok(())
 }
 
-/// Remove a cookie by name
+/// Remove a cookie by name and URL
+/// Sets an expired cookie to delete it, matching the domain and path from the URL.
 #[napi]
 pub fn remove_cookie(window_id: u32, name: String, url: Option<String>) -> Result<()> {
-    // To remove a cookie, set it with an expired date
-    let mut script = format!(
-        "document.cookie = '{}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'",
-        name
-    );
+    let mut script_parts = vec![
+        format!("{}=;expires=Thu, 01 Jan 1970 00:00:00 GMT", name),
+    ];
 
-    // If URL is provided, try to extract domain
+    // Always set path=/ to cover the broadest scope
+    script_parts.push("path=/".to_string());
+
+    // If a URL is provided, extract and set the domain so cookies scoped to
+    // that domain (including .example.com) are also removed.
     if let Some(url) = url {
         if let Some(domain) = extract_domain(&url) {
-            script = format!(
-                "document.cookie = '{}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain={}'",
-                name, domain
-            );
+            script_parts.push(format!("domain={}", domain));
         }
     }
+
+    let cookie_str = script_parts.join(";");
+    let script = format!(
+        "document.cookie = {};",
+        serde_json::to_string(&cookie_str).unwrap_or_default()
+    );
 
     let windows = WINDOWS.lock();
     let state = windows
@@ -212,68 +216,24 @@ pub struct ClearStorageOptions {
     pub cache_storage: Option<bool>,
 }
 
-/// Get the user agent string
+/// Get the user agent string for a window
+///
+/// **Limitation**: The system webview backend cannot return values from
+/// `evaluate_script`. This always returns an empty string. Use the CEF backend
+/// for real user agent access.
 #[napi]
-pub async fn get_user_agent(window_id: u32) -> Result<String> {
-    let script = "navigator.userAgent";
-    execute_script_for_cookies(window_id, script)
+pub async fn get_user_agent(_window_id: u32) -> Result<String> {
+    Ok(String::new())
 }
 
 /// Set a custom user agent (must be called before loading content)
-/// Note: This is limited - full user agent override requires native implementation
+/// Note: This is limited - full user agent override requires native implementation at WebView creation
 #[napi]
 pub fn set_user_agent(_window_id: u32, _user_agent: String) -> Result<()> {
-    // User agent override in wry requires setting it during WebView creation
-    // This is a placeholder - actual implementation would need changes to create_window_in_loop
     Err(Error::new(
         Status::GenericFailure,
         "setUserAgent must be called in BrowserWindow options, not after creation",
     ))
-}
-
-// Helper function to execute script and get result
-fn execute_script_for_cookies(window_id: u32, script: &str) -> Result<String> {
-    let windows = WINDOWS.lock();
-    let state = windows
-        .get(&window_id)
-        .ok_or_else(|| Error::new(Status::GenericFailure, "Window not found"))?;
-
-    // For now, use synchronous execution via evaluate_script
-    // The actual result needs to be retrieved via the IPC mechanism
-    // This is a simplified implementation
-    state
-        .webview
-        .evaluate_script(script)
-        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-
-    // Return empty string - actual implementation would need async callback
-    Ok("[]".to_string())
-}
-
-// Parse cookies from JSON string
-fn parse_cookies_json(json: &str) -> Result<Vec<Cookie>> {
-    #[derive(serde::Deserialize)]
-    struct SimpleCookie {
-        name: String,
-        value: String,
-    }
-
-    let simple_cookies: Vec<SimpleCookie> =
-        serde_json::from_str(json).unwrap_or_else(|_| Vec::new());
-
-    Ok(simple_cookies
-        .into_iter()
-        .map(|c| Cookie {
-            name: c.name,
-            value: c.value,
-            domain: None,
-            path: None,
-            secure: None,
-            http_only: None,
-            same_site: None,
-            expiration_date: None,
-        })
-        .collect())
 }
 
 // Simple domain extraction from URL

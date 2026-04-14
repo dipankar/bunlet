@@ -4,6 +4,7 @@
  * Provides cross-platform clipboard operations.
  */
 
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /**
@@ -15,6 +16,7 @@ export const clipboard = {
    * @returns The text content from clipboard
    */
   readText(): string {
+    assertRuntimeCapability('clipboard', 'clipboard.readText()');
     return native.clipboardReadText();
   },
 
@@ -23,6 +25,7 @@ export const clipboard = {
    * @param text - The text to write to clipboard
    */
   writeText(text: string): void {
+    assertRuntimeCapability('clipboard', 'clipboard.writeText()');
     native.clipboardWriteText(text);
   },
 
@@ -30,6 +33,7 @@ export const clipboard = {
    * Clear the clipboard
    */
   clear(): void {
+    assertRuntimeCapability('clipboard', 'clipboard.clear()');
     native.clipboardClear();
   },
 
@@ -38,6 +42,7 @@ export const clipboard = {
    * @returns True if clipboard contains text
    */
   hasText(): boolean {
+    assertRuntimeCapability('clipboard', 'clipboard.hasText()');
     return native.clipboardHasText();
   },
 };

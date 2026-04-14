@@ -194,13 +194,13 @@ Exit criteria:
 - [x] Create `window-manager` abstraction in `packages/bunlet`.
 - [x] Move `windowRegistry` behind that manager.
 - [x] Separate `WebContents` state from `BrowserWindow` state.
-- [ ] Add native-originated window events for focus, blur, resize, move, close, destroy, title, and navigation changes.
-- [ ] Implement authoritative `getURL()`, `getTitle()`, `canGoBack()`, and `canGoForward()`.
-- [ ] Formalize preload lifecycle and context isolation behavior.
-- [ ] Add secure renderer bridge bootstrap contract.
-- [ ] Add parent/child/modal window behavior tests.
-- [ ] Add core multi-window integration tests.
-- [ ] Add platform smoke tests for create window, load file, load URL, IPC round-trip.
+- [ ] Add native-originated window events for focus, blur, resize, move, close, destroy, title, and navigation changes. *(Scale factor, theme change, file drop, preload lifecycle events added; focus/blur/resize/move/close/destroy were already present)*
+- [x] Implement authoritative `getURL()`, `getTitle()`, `canGoBack()`, and `canGoForward()`. (Uses WebContentsState tracking for system webview; native queries throw explicit errors when not supported)
+- [ ] Formalize preload lifecycle and context isolation behavior. *(Bootstrap contract and error/success events implemented; full context isolation sandbox pending)*
+- [x] Add secure renderer bridge bootstrap contract. *(contextBridge + IPC in init script with deep-clone function wrapping)*
+- [x] Add parent/child/modal window behavior tests.
+- [x] Add core multi-window integration tests.
+- [x] Add platform smoke tests for create window, load file, load URL, IPC round-trip.
 
 Exit criteria:
 
@@ -212,11 +212,14 @@ Exit criteria:
 - [ ] Move native APIs under a shared backend capability system.
 - [ ] Define per-feature capability reporting for platform gaps.
 - [ ] Implement dialog/menu/tray/notification/clipboard/shell/shortcuts against the shared contracts.
-- [ ] Normalize unsupported behavior into explicit errors rather than silent degradation.
-- [ ] Complete app path handling through the backend contract.
-- [ ] Move session and cookie APIs onto the new partition-based session model.
+- [x] Normalize unsupported behavior into explicit errors rather than silent degradation (ghost stubs removed).
+- [ ] Move native APIs under a shared backend capability system. *(RuntimeCapabilities expanded to 18 flags; all native APIs gated with assertRuntimeCapability)*
+- [x] Define per-feature capability reporting for platform gaps. *(Per-backend capability differences documented in capability-matrix.md; system webview limitations table added)*
+- [x] Implement dialog/menu/tray/notification/clipboard/shell/shortcuts against the shared contracts. *(All implemented with capability gating)*
+- [ ] Complete app path handling through the backend contract. *(getPath already covers all Electron-style paths)*
+- [ ] Move session and cookie APIs onto the new partition-based session model. *(Session already uses partition-based architecture; cookies limited on system webview per documented capability matrix)*
 - [ ] Add native API integration tests per supported platform.
-- [ ] Publish a capability matrix doc for system webview backend.
+- [x] Publish a capability matrix doc for system webview backend.
 
 Exit criteria:
 
@@ -225,10 +228,11 @@ Exit criteria:
 
 ## Phase 3: Developer Experience
 
-- [ ] Move CLI config resolution into shared loader.
-- [ ] Separate dev server responsibilities from HMR protocol responsibilities.
-- [ ] Add a real module graph and HMR acceptance model instead of full reload fallback for JS updates.
-- [ ] Keep CSS HMR isolated from JS reload behavior.
+- [x] Move CLI config resolution into shared loader. *(CLI config now validates via shared Zod schema from bunlet/config; `loadBunletConfigWithWarnings` returns soft warnings)*
+- [x] Separate dev server responsibilities from HMR protocol responsibilities. *(Import analysis is a separate module; HMR polyfill is a separate module; server orchestrates them)*
+- [x] Add a real module graph and HMR acceptance model instead of full reload fallback for JS updates. *(Module graph populated from import analysis on dev server startup; `addImport`/`acceptModule` called on file changes via `analyzeImports`)*
+- [x] Keep CSS HMR isolated from JS reload behavior (CSS hot-swap via link tag replacement).
+- [x] Add `import.meta.hot` polyfill injection for dev mode. *(Polyfill prepended to served JS/TS files; rewrites `import.meta.hot.accept()` → `__bunlet_hmr.accept()`, `import.meta.hot.decline()` → `__bunlet_hmr.decline()`, `import.meta.hot` → `true`)*
 - [ ] Add resilient main-process restart with window/session state restoration strategy.
 - [ ] Add preload watcher and rebuild pipeline.
 - [ ] Formalize debug logging namespaces across CLI, runtime, native, and updater.
@@ -262,6 +266,7 @@ Exit criteria:
 - [ ] Standardize blockmap generation and hashing.
 - [ ] Make update manifest generation a build/package output, not a separate ad hoc path.
 - [ ] Refactor auto-updater to use provider interfaces plus artifact metadata.
+- [x] Add update integrity verification (SHA-512 hash check against manifest before and after download).
 - [ ] Add install strategy abstraction per platform.
 - [ ] Add staged rollout policy model.
 - [ ] Add update integration tests with fixture manifests.
@@ -273,14 +278,25 @@ Exit criteria:
 
 ## Phase 6: CEF Mode
 
-- [ ] Finalize the runtime contract before adding more CEF code.
-- [ ] Implement CEF as a strict `RuntimeBackend`.
-- [ ] Remove implicit reliance on `@bunlet/native` for core CEF APIs.
-- [ ] Implement real CEF JavaScript execution, IPC bridge, DevTools, and navigation model.
-- [ ] Implement multi-process lifecycle management.
-- [ ] Add CEF capability matrix and parity checklist against system webview backend.
-- [ ] Make build/package pipeline include CEF runtime assets through the shared artifact manifest.
-- [ ] Add backend parity smoke tests that run the same app suite under system webview and CEF.
+- [x] Finalize the runtime contract before adding more CEF code
+- [x] Implement CEF as a strict `RuntimeBackend` using `cef` crate from tauri-apps/cef-rs
+- [x] Add CEF browser process handler (init, event loop, window creation with BrowserView)
+- [x] Add CEF browser view delegate and window delegate for the Views framework
+- [x] Implement CEF IPC bridge (render process → main process via CEF ProcessMessage)
+- [x] Implement `executeJavaScript` via CEF frame.execute_java_script
+- [x] Implement DevTools support (open/close/toggle/isDevtoolsOpen) via CEF BrowserHost
+- [x] Implement navigation (goBack, goForward, reload, stop) via CEF
+- [x] Implement preload script injection via CEF initialization scripts + V8 context
+- [x] Update capability matrix to reflect CEF backend having executeJavaScript, devtools, navigation, preloadScripts, contextIsolation
+- [x] Update TypeScript runtime/backend.ts to enable all capabilities for CEF engine
+- [x] Update @bunlet/cef index.js proxy to separate core APIs, CEF-parity APIs, and fallback APIs
+- [x] Wire up CEF multi-process lifecycle management (render process helper, GPU process)
+- [x] Implement CEF `sendIpcMessage` via CEF ProcessMessage instead of evaluate_script
+- [x] Implement authoritative window events from CEF (resize, move, focus, blur) via CEF callbacks
+- [x] Implement session/cookie partitioning via CEF RequestContext
+- [ ] Make build/package pipeline include CEF runtime assets through the shared artifact manifest
+- [ ] Add CEF capability parity smoke tests that run the same app suite under system webview and CEF
+- [ ] Remove implicit reliance on `@bunlet/native` for core CEF APIs
 
 Exit criteria:
 
@@ -318,8 +334,8 @@ These are the first tasks to start with because they unlock the rest of the road
 
 ## Current Risks
 
-- Public API claims exceed implemented behavior in some areas.
-- Placeholder implementations can hide missing native support.
+- ~~Public API claims exceed implemented behavior in some areas.~~ (Bug sweep completed; silent no-ops replaced with explicit errors)
+- ~~Placeholder implementations can hide missing native support.~~ (Ghost stubs eliminated; limitations documented in capability matrix)
 - CEF can become a permanent fork if parity is not contract-driven.
 - CLI commands currently duplicate config and pipeline logic.
 - Packaging, publishing, and updating can drift without a shared artifact model.

@@ -65,11 +65,36 @@ pub struct NotificationOptions {
     pub actions: Option<Vec<NotificationAction>>,
 }
 
-/// Check if notifications are supported
+/// Check if notifications are supported on this platform
 #[napi]
 pub fn notification_is_supported() -> bool {
-    // Notifications are generally supported on all desktop platforms
-    true
+    #[cfg(target_os = "linux")]
+    {
+        // Check if a notification daemon is available via D-Bus
+        std::process::Command::new("dbus-send")
+            .args([
+                "--session",
+                "--dest=org.freedesktop.Notifications",
+                "--type=method_call",
+                "/org/freedesktop/Notifications",
+                "org.freedesktop.Notifications.GetServerInfo",
+            ])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS always supports notifications via Notification Center
+        true
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows supports notifications via Windows Runtime
+        true
+    }
 }
 
 /// Set the notification event callback

@@ -8,7 +8,14 @@ import {
 
 function createTarget() {
   const emitted: Array<{ event: string; args: unknown[] }> = [];
-  const target = {
+  const target: NativeWindowEventTarget & {
+    windowTitle: string;
+    pageTitle: string;
+    currentUrl: string;
+    destroyed: boolean;
+    closeRequests: number;
+    markClosedCalls: number;
+  } = {
     windowTitle: 'Window',
     pageTitle: 'Window',
     currentUrl: '',
@@ -132,6 +139,107 @@ describe('native window event handling', () => {
     expect(target.destroyed).toBe(true);
     expect(target.markClosedCalls).toBe(1);
     expect(emitted).toEqual([{ event: 'closed', args: [] }]);
+  });
+
+  test('emits scale-factor-changed event with factor', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-scale-factor-changed',
+      windowId: 1,
+      scaleFactor: 2.0,
+    });
+
+    expect(emitted).toEqual([
+      { event: 'scale-factor-changed', args: [2.0] },
+    ]);
+  });
+
+  test('emits theme-changed event with theme name', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-theme-changed',
+      windowId: 1,
+      theme: 'dark',
+    });
+
+    expect(emitted).toEqual([
+      { event: 'theme-changed', args: ['dark'] },
+    ]);
+  });
+
+  test('emits file-drop event with file paths', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-file-drop',
+      windowId: 1,
+      files: ['/path/to/file.txt', '/path/to/other.pdf'],
+    });
+
+    expect(emitted).toEqual([
+      { event: 'file-drop', args: [['/path/to/file.txt', '/path/to/other.pdf']] },
+    ]);
+  });
+
+  test('emits file-drag-enter event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-file-hover',
+      windowId: 1,
+      files: ['/hover/file.txt'],
+    });
+
+    expect(emitted).toEqual([
+      { event: 'file-drag-enter', args: [['/hover/file.txt']] },
+    ]);
+  });
+
+  test('emits file-drag-leave event without file paths', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-file-hover-cancelled',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([
+      { event: 'file-drag-leave', args: [] },
+    ]);
+  });
+
+  test('emits preload-success event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'preload-success',
+      windowId: 1,
+      preloadPath: '/app/preload.js',
+    });
+
+    expect(emitted).toEqual([
+      { event: 'preload-success', args: ['/app/preload.js'] },
+    ]);
+  });
+
+  test('emits preload-error event with message', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'preload-error',
+      windowId: 1,
+      preloadPath: '/app/preload.js',
+      errorMessage: 'SyntaxError: Unexpected token',
+    });
+
+    expect(emitted).toEqual([
+      {
+        event: 'preload-error',
+        args: [{ path: '/app/preload.js', message: 'SyntaxError: Unexpected token' }],
+      },
+    ]);
   });
 });
 

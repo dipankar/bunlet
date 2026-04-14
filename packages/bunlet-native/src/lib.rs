@@ -308,11 +308,35 @@ fn build_initialization_script(options: &WindowOptions) -> std::result::Result<S
     .to_string();
 
     if let Some(preload_script_path) = &options.preload_script {
-        let preload_script = std::fs::read_to_string(preload_script_path)
+        let preload_content = std::fs::read_to_string(preload_script_path)
             .map_err(|e| format!("Failed to read preload script '{}': {}", preload_script_path, e))?;
-        script.push_str("\ntry {\n");
-        script.push_str(&preload_script);
-        script.push_str("\n} catch (e) { console.error('Preload execution failed:', e); }\n");
+
+        // Preload lifecycle: wrap in try/catch and emit success/error events
+        // The preload script runs after the IPC bridge and context bridge are set up,
+        // but before the page content loads. Errors are reported via IPC rather than
+        // silently swallowed.
+        script.push_str("\n(function() {\n");
+        script.push_str("  var __bunlet_preload_path = ");
+        script.push_str(&serde_json::to_string(preload_script_path).unwrap_or_default());
+        script.push_str(";\n");
+        script.push_str("  try {\n");
+        script.push_str("    // Preload script executes with access to __bunlet IPC and contextBridge\n");
+        script.push_str(&preload_content);
+        script.push_str("\n    // Signal successful preload completion\n");
+        script.push_str("    if (window.__bunlet && window.__bunlet._emitInternalWindowEvent) {\n");
+        script.push_str("      window.__bunlet._emitInternalWindowEvent('preload-success', { path: __bunlet_preload_path });\n");
+        script.push_str("    }\n");
+        script.push_str("  } catch (e) {\n");
+        script.push_str("    console.error('[bunlet] Preload script execution failed:', e);\n");
+        script.push_str("    if (window.__bunlet && window.__bunlet._emitInternalWindowEvent) {\n");
+        script.push_str("      window.__bunlet._emitInternalWindowEvent('preload-error', {\n");
+        script.push_str("        path: __bunlet_preload_path,\n");
+        script.push_str("        message: e && e.message ? e.message : String(e),\n");
+        script.push_str("        stack: e && e.stack ? e.stack : undefined\n");
+        script.push_str("      });\n");
+        script.push_str("    }\n");
+        script.push_str("  }\n");
+        script.push_str("})();\n");
     }
 
     Ok(script)

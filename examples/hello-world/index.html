@@ -138,33 +138,7 @@
   <script>
     // IPC bridge (injected by Bunlet)
     async function invoke(method, params = {}) {
-      return new Promise((resolve, reject) => {
-        const id = Math.random().toString(36).substring(7);
-
-        // Set up response handler
-        window.__bunlet.onMessage((response) => {
-          try {
-            const parsed = JSON.parse(response);
-            if (parsed.id === id) {
-              if (parsed.error) {
-                reject(new Error(parsed.error.message));
-              } else {
-                resolve(parsed.result);
-              }
-            }
-          } catch (e) {
-            // Ignore non-JSON messages
-          }
-        });
-
-        // Send request
-        window.__bunlet.invoke({
-          jsonrpc: '2.0',
-          id,
-          method,
-          params,
-        });
-      });
+      return window.__bunlet.invoke({ method, params });
     }
 
     async function greet() {

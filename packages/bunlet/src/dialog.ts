@@ -4,6 +4,7 @@
  * Provides cross-platform file dialogs and message boxes.
  */
 
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 import type { BrowserWindow } from './browser-window';
 
@@ -125,6 +126,7 @@ export const dialog = {
     _browserWindow: BrowserWindow | null,
     options: OpenDialogOptions
   ): Promise<OpenDialogReturnValue> {
+    assertRuntimeCapability('dialogs', 'dialog.showOpenDialog()');
     const properties = options.properties || ['openFile'];
 
     const result = await native.showOpenDialog({
@@ -155,6 +157,7 @@ export const dialog = {
     _browserWindow: BrowserWindow | null,
     options: SaveDialogOptions
   ): Promise<SaveDialogReturnValue> {
+    assertRuntimeCapability('dialogs', 'dialog.showSaveDialog()');
     const result = await native.showSaveDialog({
       title: options.title,
       defaultPath: options.defaultPath,
@@ -180,6 +183,7 @@ export const dialog = {
     _browserWindow: BrowserWindow | null,
     options: MessageBoxOptions
   ): Promise<MessageBoxReturnValue> {
+    assertRuntimeCapability('dialogs', 'dialog.showMessageBox()');
     const result = await native.showMessageBox({
       messageType: options.type,
       title: options.title,

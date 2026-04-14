@@ -25,15 +25,20 @@ describe('session model', () => {
   });
 
   test('resolves partitioned sessions consistently', () => {
-    const first = Session.fromPartition('notes');
-    const second = Session.fromPartition('persist:notes');
+    // Without 'persist:' prefix, partition is ephemeral (in-memory only)
+    const ephemeral = Session.fromPartition('notes');
+    expect(ephemeral.partition).toBe('ephemeral:notes');
 
-    expect(first).toBe(second);
-    expect(first.partition).toBe('persist:notes');
+    // With 'persist:' prefix, partition is persistent (stored on disk)
+    const persistent = Session.fromPartition('persist:notes');
+    expect(persistent.partition).toBe('persist:notes');
+
+    // Different types are different sessions
+    expect(ephemeral).not.toBe(persistent);
   });
 
   test('prefers explicit session over implicit defaults', () => {
-    const customSession = Session.fromPartition('workspace');
+    const customSession = Session.fromPartition('persist:workspace');
 
     expect(
       resolveSessionForWebPreferences({
@@ -55,7 +60,7 @@ describe('session model', () => {
   });
 
   test('attach and detach helpers support partition-backed sessions', () => {
-    const customSession = Session.fromPartition('ephemeral');
+    const customSession = Session.fromPartition('persist:ephemeral');
 
     attachSessionToWindow(1001, customSession);
     detachSessionFromWindow(1001);

@@ -19,6 +19,9 @@ function createWindow() {
     height: 550,
     title: 'Power Monitor',
     resizable: false,
+    webPreferences: {
+      preload: path.join(import.meta.dir, 'preload.ts'),
+    },
   });
 
   // Note: center() is disabled on Linux due to screen API limitations
@@ -105,7 +108,7 @@ app.handle('get-power-state', z.object({}), async () => {
 app.handle(
   'get-idle-state',
   z.object({ threshold: z.number().optional() }),
-  async (_, params) => {
+  async (params) => {
     const threshold = params?.threshold || 60;
     return {
       state: powerMonitor.getSystemIdleState(threshold),

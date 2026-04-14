@@ -156,7 +156,15 @@ export class Cookies extends EventEmitter {
           result = result.filter((c) => c.name === filter.name);
         }
         if (filter.domain) {
-          result = result.filter((c) => c.domain === filter.domain || c.domain?.endsWith(filter.domain!));
+          const fd = filter.domain;
+          result = result.filter((c) => {
+            if (!c.domain) return false;
+            if (c.domain === fd) return true;
+            // A cookie for ".example.com" should match filter "example.com"
+            // but "notexample.com" should NOT match filter "example.com"
+            const dotted = fd.startsWith('.') ? fd : `.${fd}`;
+            return c.domain === dotted || c.domain?.endsWith(dotted);
+          });
         }
         if (filter.path) {
           result = result.filter((c) => c.path === filter.path || c.path?.startsWith(filter.path!));
@@ -170,8 +178,9 @@ export class Cookies extends EventEmitter {
       }
 
       return result;
-    } catch {
-      return [];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      throw new Error(`[bunlet] session.cookies.get() failed: ${error.message}`);
     }
   }
 
@@ -222,7 +231,10 @@ export class Cookies extends EventEmitter {
    * Note: This is a no-op in bunlet as cookies are persisted by the underlying WebView
    */
   async flushStore(): Promise<void> {
-    // No-op - the underlying WebView handles persistence
+    throw new Error(
+      `[bunlet] session.cookies.flushStore() is not yet supported. ` +
+      `The underlying webview handles cookie persistence automatically.`
+    );
   }
 
   // Event emitter type overloads
@@ -403,10 +415,17 @@ export class Session extends EventEmitter {
     assertRuntimeCapability('cookies', 'session.getUserAgent()');
     const windowId = this.getRepresentativeWindowId();
     if (windowId === null) {
-      return 'bunlet';
+      throw new Error('No window associated with this session');
     }
 
-    return native.getUserAgent(windowId);
+    const result = await native.getUserAgent(windowId);
+    if (result === '') {
+      throw new Error(
+        `[bunlet] session.getUserAgent() is not supported by the system webview backend. ` +
+        `Use the CEF backend for real user agent access.`
+      );
+    }
+    return result;
   }
 
   /**
@@ -414,15 +433,17 @@ export class Session extends EventEmitter {
    * Note: Spell checking is not yet implemented in bunlet
    */
   isSpellCheckerEnabled(): boolean {
-    return false;
+    throw new Error(
+      `[bunlet] session.isSpellCheckerEnabled() is not yet supported. ` +
+      `Spell checking is not implemented.`
+    );
   }
 
-  /**
-   * Set spell checker enabled
-   * Note: Spell checking is not yet implemented in bunlet
-   */
   setSpellCheckerEnabled(_enable: boolean): void {
-    // Not implemented
+    throw new Error(
+      `[bunlet] session.setSpellCheckerEnabled() is not yet supported. ` +
+      `Spell checking is not implemented.`
+    );
   }
 
   // Event emitter type overloads
@@ -478,7 +499,17 @@ function normalizePartition(partition: string): string {
     return '';
   }
 
-  return partition.startsWith('persist:') ? partition : `persist:${partition}`;
+  // In Electron, partitions starting with 'persist:' are persistent (stored on disk).
+  // Partitions without 'persist:' prefix are ephemeral (in-memory only).
+  // We preserve the prefix distinction so callers can choose session lifetime.
+  // The default session (empty string) is always persistent.
+  if (partition.startsWith('persist:')) {
+    return partition;
+  }
+
+  // A partition string without 'persist:' is an ephemeral partition.
+  // Prepend a namespace to avoid collisions with the default session.
+  return `ephemeral:${partition}`;
 }
 
 /**

@@ -16,7 +16,7 @@ describe('renderer bridge', () => {
   test('ipcRenderer.invoke forwards method and params', async () => {
     let payload: { method: string; params?: unknown } | null = null;
 
-    (globalThis as { __bunlet: TestBridge }).__bunlet = {
+    (globalThis as unknown as { __bunlet: TestBridge }).__bunlet = {
       invoke: async (input) => {
         payload = input;
         return { ok: true };
@@ -27,7 +27,7 @@ describe('renderer bridge', () => {
     };
 
     const result = await ipcRenderer.invoke<{ ok: boolean }>('ping', { x: 1 });
-    expect(payload).toEqual({ method: 'ping', params: { x: 1 } });
+    expect(payload!).toEqual({ method: 'ping', params: { x: 1 } });
     expect(result.ok).toBe(true);
   });
 

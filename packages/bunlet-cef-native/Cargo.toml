@@ -2,25 +2,52 @@
 name = "bunlet-cef-native"
 version = "0.1.0"
 edition = "2021"
-description = "Native CEF bindings scaffold for Bunlet desktop framework"
+description = "Native CEF bindings for Bunlet desktop framework"
 license = "MIT"
 repository = "https://github.com/bunlet/bunlet"
 
 [lib]
 crate-type = ["cdylib"]
 
+[[bin]]
+name = "bunlet-cef-helper"
+path = "src/bin/helper.rs"
+
 [dependencies]
+# NAPI bindings for Bun/Node.js
 napi = { version = "2", default-features = false, features = ["async", "serde-json", "napi9"] }
 napi-derive = "2"
-tao = { version = "0.28", features = ["serde"] }
+
+# CEF (Chromium Embedded Framework) bindings from Tauri team
+cef = "146"
+cef-dll-sys = "146"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Thread-safe state
 once_cell = "1"
 parking_lot = "0.12"
-send_wrapper = "0.6"
+
+# Standard directories
 dirs-next = "2"
-serde_json = "1"
+
+# URL encoding
+urlencoding = "2"
+
+# Send wrapper for !Send types
+send_wrapper = "0.6"
+
+# Logging
+log = "0.4"
 
 [build-dependencies]
 napi-build = "2"
+
+[features]
+default = []
+sandbox = []
 
 [profile.release]
 lto = true

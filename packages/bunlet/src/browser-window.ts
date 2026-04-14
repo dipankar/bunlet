@@ -51,6 +51,11 @@ export class WebContents extends EventEmitter {
   async executeJavaScript(code: string): Promise<unknown> {
     assertRuntimeCapability('executeJavaScript', 'webContents.executeJavaScript()');
     const result = await native.executeJavaScript(this.windowId, code);
+    // wry's evaluate_script is fire-and-forget and returns an empty string.
+    // Return undefined when no result is available rather than trying to parse "".
+    if (result === '' || result === undefined || result === null) {
+      return undefined;
+    }
     try {
       return JSON.parse(result);
     } catch {
@@ -146,6 +151,8 @@ export class WebContents extends EventEmitter {
    */
   canGoBack(): boolean {
     assertRuntimeCapability('navigation', 'webContents.canGoBack()');
+    // The system webview backend does not natively support canGoBack queries.
+    // We rely on WebContentsState tracking via navigation events.
     return this.state.canGoBack();
   }
 
@@ -154,6 +161,8 @@ export class WebContents extends EventEmitter {
    */
   canGoForward(): boolean {
     assertRuntimeCapability('navigation', 'webContents.canGoForward()');
+    // The system webview backend does not natively support canGoForward queries.
+    // We rely on WebContentsState tracking via navigation events.
     return this.state.canGoForward();
   }
 
@@ -190,6 +199,16 @@ export class WebContents extends EventEmitter {
 
   setTitle(title: string): void {
     this.state.setTitle(title);
+  }
+
+  /**
+   * Send a message to the renderer process via IPC.
+   * The renderer can listen with window.__bunlet.on(channel, callback).
+   */
+  send(channel: string, ...args: unknown[]): void {
+    assertRuntimeCapability('mainToRendererPush', 'webContents.send()');
+    const message = JSON.stringify({ channel, args });
+    native.sendIpcMessage(this.windowId, message);
   }
 }
 
@@ -319,6 +338,9 @@ export class BrowserWindow extends EventEmitter {
       : path.resolve(process.cwd(), preloadPath);
 
     if (fs.existsSync(absolutePath)) {
+      if (/\.(ts|tsx|mts|cts)$/i.test(absolutePath)) {
+        return this.transpilePreloadScript(absolutePath);
+      }
       return absolutePath;
     }
 
@@ -333,6 +355,20 @@ export class BrowserWindow extends EventEmitter {
 
     console.warn(`Preload script not found: ${absolutePath}`);
     return undefined;
+  }
+
+  private transpilePreloadScript(tsPath: string): string {
+    try {
+      const tsContent = fs.readFileSync(tsPath, 'utf-8');
+      const jsPath = tsPath.replace(/\.(ts|tsx|mts|cts)$/i, '.bunlet-preload.js');
+      const transpiler = new Bun.Transpiler({ loader: 'ts' });
+      const transpiled = transpiler.transformSync(tsContent);
+      fs.writeFileSync(jsPath, transpiled);
+      return jsPath;
+    } catch (e) {
+      console.warn(`Failed to transpile preload script ${tsPath}:`, e);
+      return tsPath;
+    }
   }
 
   /**
@@ -371,8 +407,15 @@ export class BrowserWindow extends EventEmitter {
    * Remove focus from the window
    */
   blur(): void {
-    // Would need native support
-    this.emit('blur');
+    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+    if (typeof nativeAny.blurWindow === 'function') {
+      nativeAny.blurWindow(this.id);
+    } else {
+      throw new Error(
+        `[bunlet] BrowserWindow.blur() is not supported by the current backend. ` +
+        `Missing native implementation: blurWindow.`
+      );
+    }
   }
 
   // State checks
@@ -388,10 +431,14 @@ export class BrowserWindow extends EventEmitter {
    * Check if window is focused
    */
   isFocused(): boolean {
-    if (typeof native.isWindowFocused === 'function') {
-      return native.isWindowFocused(this.id);
+    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+    if (typeof nativeAny.isWindowFocused === 'function') {
+      return !!nativeAny.isWindowFocused(this.id);
     }
-    return false;
+    throw new Error(
+      `[bunlet] BrowserWindow.isFocused() is not supported by the current backend. ` +
+      `Missing native implementation: isWindowFocused.`
+    );
   }
 
   /**
@@ -480,7 +527,7 @@ export class BrowserWindow extends EventEmitter {
   /**
    * Set window bounds
    */
-  setBounds(bounds: Partial<Rectangle>, animate = false): void {
+  setBounds(bounds: Partial<Rectangle>, _animate = false): void {
     native.setWindowBounds(
       this.id,
       bounds.x ?? null,
@@ -493,14 +540,14 @@ export class BrowserWindow extends EventEmitter {
   /**
    * Set window size
    */
-  setSize(width: number, height: number, animate = false): void {
+  setSize(width: number, height: number, _animate = false): void {
     native.setWindowBounds(this.id, null, null, width, height);
   }
 
   /**
    * Set window position
    */
-  setPosition(x: number, y: number, animate = false): void {
+  setPosition(x: number, y: number, _animate = false): void {
     native.setWindowBounds(this.id, x, y, null, null);
   }
 
@@ -537,17 +584,26 @@ export class BrowserWindow extends EventEmitter {
    * Set always on top
    */
   setAlwaysOnTop(flag: boolean): void {
-    if (typeof native.setWindowAlwaysOnTop === 'function') {
-      native.setWindowAlwaysOnTop(this.id, flag);
+    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+    if (typeof nativeAny.setWindowAlwaysOnTop === 'function') {
+      nativeAny.setWindowAlwaysOnTop(this.id, flag);
+      this.options.alwaysOnTop = flag;
+    } else {
+      throw new Error(
+        `[bunlet] BrowserWindow.setAlwaysOnTop() is not supported by the current backend. ` +
+        `Missing native implementation: setWindowAlwaysOnTop.`
+      );
     }
-    this.options.alwaysOnTop = flag;
   }
 
   /**
    * Set background color
    */
   setBackgroundColor(color: string): void {
-    // Would need native support
+    throw new Error(
+      `[bunlet] BrowserWindow.setBackgroundColor() is not yet supported. ` +
+      `Track progress: https://github.com/nicholasbishop/cef-rs/issues`
+    );
   }
 
   // Lifecycle

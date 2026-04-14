@@ -160,25 +160,35 @@ pub async fn show_save_dialog(options: SaveDialogOptions) -> SaveDialogResult {
 }
 
 /// Show a message box
+///
+/// **Limitation**: The underlying `rfd` dialog crate only supports up to 2
+/// buttons (Ok/Cancel, Yes/No). If 3+ button labels are provided, only the
+/// first 2 are displayed and the response is mapped accordingly.
 #[napi]
 pub async fn show_message_box(options: MessageBoxOptions) -> MessageBoxResult {
     let level = match options.message_type.as_deref() {
-        Some("info") => MessageLevel::Info,
         Some("warning") => MessageLevel::Warning,
         Some("error") => MessageLevel::Error,
         _ => MessageLevel::Info,
     };
 
-    let buttons = if let Some(btn_labels) = &options.buttons {
-        if btn_labels.len() == 1 {
-            MessageButtons::Ok
-        } else if btn_labels.len() == 2 {
-            MessageButtons::OkCancel
+    let (buttons, _num_labels) = if let Some(btn_labels) = &options.buttons {
+        let n = btn_labels.len();
+        if n == 0 {
+            (MessageButtons::Ok, 0)
+        } else if n == 1 {
+            (MessageButtons::Ok, 1)
         } else {
-            MessageButtons::OkCancel
+            // For 2+ buttons, use OkCancel which gives us two buttons.
+            // The first label maps to "Ok" (response 0), rest to "Cancel" (response 1).
+            // 3+ button labels are not supported by the underlying dialog.
+            if n > 2 {
+                eprintln!("[bunlet] Warning: showMessageBox only supports up to 2 buttons. Extra labels will be ignored.");
+            }
+            (MessageButtons::OkCancel, n)
         }
     } else {
-        MessageButtons::Ok
+        (MessageButtons::Ok, 0)
     };
 
     let mut dialog = MessageDialog::new()
@@ -198,7 +208,6 @@ pub async fn show_message_box(options: MessageBoxOptions) -> MessageBoxResult {
         MessageDialogResult::Yes => 0,
         MessageDialogResult::No => 1,
         MessageDialogResult::Custom(s) => {
-            // Try to find the button index
             if let Some(buttons) = &options.buttons {
                 buttons.iter().position(|b| b == &s).unwrap_or(0) as i32
             } else {

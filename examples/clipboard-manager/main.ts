@@ -25,6 +25,7 @@ let tray: Tray | null = null;
 let clipboardHistory: Array<{ text: string; timestamp: number }> = [];
 let lastClipboardContent = '';
 let isQuitting = false;
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 const MAX_HISTORY = 20;
 const POLL_INTERVAL = 500; // Check clipboard every 500ms
@@ -34,6 +35,9 @@ function createWindow() {
     width: 400,
     height: 500,
     title: 'Clipboard Manager',
+    webPreferences: {
+      preload: path.join(import.meta.dir, 'preload.ts'),
+    },
   });
 
   // Note: center() is disabled on Linux due to screen API limitations
@@ -73,7 +77,7 @@ function createTray() {
         label: 'Clear History',
         click: () => {
           clipboardHistory = [];
-          // Note: webContents.send() not yet implemented
+          mainWindow?.webContents.send('history-updated', clipboardHistory);
         },
       })
     );
@@ -115,7 +119,7 @@ function showWindow() {
 }
 
 function startClipboardPolling() {
-  setInterval(() => {
+  pollingInterval = setInterval(() => {
     const currentContent = clipboard.readText();
     if (currentContent && currentContent !== lastClipboardContent) {
       lastClipboardContent = currentContent;
@@ -144,9 +148,7 @@ function addToHistory(text: string) {
     clipboardHistory = clipboardHistory.slice(0, MAX_HISTORY);
   }
 
-  // Note: webContents.send() is not yet implemented in bunlet
-  // Renderer will poll for updates via IPC instead
-  // mainWindow?.webContents.send('history-updated', clipboardHistory);
+  mainWindow?.webContents.send('history-updated', clipboardHistory);
 }
 
 // IPC handlers - register before app is ready
@@ -157,7 +159,7 @@ app.handle('get-history', z.object({}), async () => {
 app.handle(
   'copy-to-clipboard',
   z.object({ text: z.string() }),
-  async (_, params) => {
+  async (params) => {
     clipboard.writeText(params.text);
     lastClipboardContent = params.text;
     return { success: true };
@@ -182,7 +184,7 @@ app.handle('clear-clipboard', z.object({}), async () => {
 app.handle(
   'remove-item',
   z.object({ index: z.number() }),
-  async (_, params) => {
+  async (params) => {
     if (params.index >= 0 && params.index < clipboardHistory.length) {
       clipboardHistory.splice(params.index, 1);
     }
@@ -193,6 +195,10 @@ app.handle(
 app.on('before-quit', () => {
   isQuitting = true;
   globalShortcut.unregisterAll();
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
 });
 
 app.on('window-all-closed', () => {

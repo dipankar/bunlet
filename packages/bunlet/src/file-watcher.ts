@@ -100,6 +100,13 @@ export class FileWatcher extends EventEmitter {
   private start(): void {
     if (this.closed) return;
 
+    if (this.options.debounce !== undefined) {
+      throw new Error(
+        `[bunlet] fileWatcher: the 'debounce' option is not yet implemented. ` +
+        `Omit it for now.`
+      );
+    }
+
     try {
       this.id = native.watchPath(this.path, this.options.recursive ?? true);
       watchers.set(this.id, this);

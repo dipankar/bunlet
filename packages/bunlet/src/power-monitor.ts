@@ -38,6 +38,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /**
@@ -90,6 +91,7 @@ class PowerMonitorImpl extends EventEmitter {
    */
   private init(): void {
     if (this.initialized) return;
+    assertRuntimeCapability('powerMonitor', 'powerMonitor');
     this.initialized = true;
 
     if (!callbackInitialized) {
@@ -115,6 +117,7 @@ class PowerMonitorImpl extends EventEmitter {
    * Check if the system is on battery power
    */
   isOnBatteryPower(): boolean {
+    assertRuntimeCapability('powerMonitor', 'powerMonitor.isOnBatteryPower()');
     return native.isOnBatteryPower();
   }
 
@@ -122,6 +125,7 @@ class PowerMonitorImpl extends EventEmitter {
    * Get battery information
    */
   getBatteryInfo(): BatteryInfo {
+    assertRuntimeCapability('powerMonitor', 'powerMonitor.getBatteryInfo()');
     const info = native.getBatteryInfo();
     return {
       level: info.level,
@@ -136,6 +140,7 @@ class PowerMonitorImpl extends EventEmitter {
    * @param idleThreshold - Number of seconds of inactivity to consider "idle" (default: 60)
    */
   getSystemIdleState(idleThreshold = 60): IdleState {
+    assertRuntimeCapability('powerMonitor', 'powerMonitor.getSystemIdleState()');
     const state = native.getSystemIdleState(idleThreshold);
     return state.state as IdleState;
   }
@@ -144,6 +149,7 @@ class PowerMonitorImpl extends EventEmitter {
    * Get the system idle time in seconds
    */
   getSystemIdleTime(): number {
+    assertRuntimeCapability('powerMonitor', 'powerMonitor.getSystemIdleTime()');
     return native.getSystemIdleTime();
   }
 
@@ -152,7 +158,10 @@ class PowerMonitorImpl extends EventEmitter {
    * Note: Not currently implemented, returns 'nominal'
    */
   getCurrentThermalState(): 'nominal' | 'fair' | 'serious' | 'critical' {
-    return 'nominal';
+    throw new Error(
+      `[bunlet] powerMonitor.getCurrentThermalState() is not yet supported. ` +
+      `Thermal state monitoring is not implemented.`
+    );
   }
 
   // Override on to auto-initialize when listeners are added

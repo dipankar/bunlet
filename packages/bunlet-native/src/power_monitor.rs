@@ -75,7 +75,10 @@ pub fn init_power_monitor() {
                 };
 
                 if let Some(callback) = POWER_CALLBACK.lock().as_ref() {
-                    callback.call(PowerEvent { event_type }, ThreadsafeFunctionCallMode::Blocking);
+                    callback.call(
+                        PowerEvent { event_type },
+                        ThreadsafeFunctionCallMode::Blocking,
+                    );
                 }
             }
 
@@ -251,9 +254,20 @@ fn get_battery_info_linux() -> BatteryInfo {
 
 #[cfg(target_os = "linux")]
 fn get_idle_time_linux() -> i64 {
-    // Try using libxdo to get X11 idle time
-    // Fallback: use /proc/uptime - not really user idle time but process uptime
-    // Real implementation would use XScreenSaverQueryInfo or D-Bus idle inhibitor
+    // Try xprintidle (X11 idle time via XScreenSaver extension)
+    let output = std::process::Command::new("xprintidle").output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(ms) = stdout.trim().parse::<i64>() {
+                return ms / 1000;
+            }
+        }
+    }
+
+    // Fallback: try xdg-screensaver reset or check for X11 via xdpyinfo
+    // If none available, return 0 as a safe default
     0
 }
 
@@ -263,24 +277,143 @@ fn get_idle_time_linux() -> i64 {
 
 #[cfg(target_os = "macos")]
 fn is_on_ac_power() -> bool {
-    // Would use IOKit to get power source information
-    true
+    // Use pmset to check AC power status
+    std::process::Command::new("pmset")
+        .arg("ac")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(true)
 }
 
 #[cfg(target_os = "macos")]
 fn get_battery_info_macos() -> BatteryInfo {
-    // Would use IOKit IOPSCopyPowerSourcesInfo
+    // Use pmset -g batt to get battery info on macOS
+    let output = std::process::Command::new("pmset")
+        .args(["-g", "batt"])
+        .output();
+
+    let mut level = 100.0;
+    let mut charging = false;
+    let mut on_ac = true;
+    let mut time_remaining: i64 = -1;
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Example output:
+        // -InternalBattery-0 (id=4811597)	42%; discharging; (3:14 remaining)
+        // -InternalBattery-0 (id=4811597)	100%; charged; 0:00 remaining
+        // -InternalBattery-0 (id=4811597)	85%; charging; (1:23 remaining)
+        // No batteries available
+
+        if stdout.contains("No batteries available") {
+            return BatteryInfo {
+                level: 100.0,
+                charging: false,
+                on_ac: true,
+                time_remaining: -1,
+            };
+        }
+
+        // Parse percentage
+        if let Some(pct_str) = stdout.split('%').next() {
+            if let Some(num_part) = pct_str.rsplit(|c: char| !c.is_ascii_digit()).next() {
+                if let Ok(pct) = num_part.parse::<f64>() {
+                    level = pct;
+                }
+            }
+        }
+
+        // Parse charging status
+        if stdout.contains("charging") && !stdout.contains("discharging") {
+            charging = true;
+            on_ac = true;
+        } else if stdout.contains("charged") {
+            charging = false;
+            on_ac = true;
+        } else if stdout.contains("discharging") {
+            charging = false;
+            on_ac = false;
+        } else if stdout.contains("AC Power") {
+            charging = false;
+            on_ac = true;
+        }
+
+        // Parse time remaining: "(3:14 remaining)" or "0:00 remaining"
+        if let Some(time_part) = stdout.split("remaining").next() {
+            // Find the last '(' before "remaining"
+            if let Some(paren_start) = time_part.rfind('(') {
+                let time_str = &time_part[paren_start + 1..];
+                // Parse H:MM format
+                let parts: Vec<&str> = time_str.split(':').collect();
+                if parts.len() == 2 {
+                    if let (Ok(h), Ok(m)) = (
+                        parts[0].trim().parse::<i64>(),
+                        parts[1].trim().parse::<i64>(),
+                    ) {
+                        time_remaining = h * 3600 + m * 60;
+                    }
+                }
+            }
+        }
+    }
+
     BatteryInfo {
-        level: 100.0,
-        charging: false,
-        on_ac: true,
-        time_remaining: -1,
+        level,
+        charging,
+        on_ac,
+        time_remaining,
     }
 }
 
 #[cfg(target_os = "macos")]
 fn get_idle_time_macos() -> i64 {
-    // Would use IOKit HIDIdleTime
+    // Use ioreg to read HIDIdleTime from IOKit
+    // HIDIdleTime is in nanoseconds
+    let output = std::process::Command::new("ioreg")
+        .args(["-c", "IOHIDSystem"])
+        .output();
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Look for "HIDIdleTime" = <number>
+        for line in stdout.lines() {
+            if line.contains("HIDIdleTime") {
+                // Parse the value - format: "HIDIdleTime" = <number>
+                if let Some(eq_idx) = line.find('=') {
+                    let value_str = line[eq_idx + 1..].trim();
+                    // Strip angle brackets if present: <number>
+                    let cleaned = value_str.trim_start_matches('<').trim_end_matches('>');
+                    if let Ok(ns) = cleaned.parse::<i64>() {
+                        // Convert nanoseconds to seconds
+                        return ns / 1_000_000_000;
+                    }
+                    // Also try plain number
+                    if let Ok(ns) = value_str.trim().parse::<i64>() {
+                        return ns / 1_000_000_000;
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: use IOKit power assertions idle time via pmset
+    let output = std::process::Command::new("python3")
+        .args([
+            "-c",
+            "import subprocess; r=subprocess.run(['ioreg','-c','IOHIDSystem'],capture_output=True,text=True); \
+             lines=r.stdout.split('\\n'); \
+             [print(int(l.split('=')[-1].strip().strip('<>').strip())/1e9) for l in lines if 'HIDIdleTime' in l]",
+        ])
+        .output();
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Ok(secs) = stdout.trim().parse::<i64>() {
+            return secs;
+        }
+    }
+
     0
 }
 
@@ -290,23 +423,73 @@ fn get_idle_time_macos() -> i64 {
 
 #[cfg(target_os = "windows")]
 fn is_on_ac_power() -> bool {
-    // Would use GetSystemPowerStatus
-    true
+    // Use PowerShell to check AC power status
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-Command",
+            "([System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus -eq 1)",
+        ])
+        .output();
+
+    match output {
+        Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_lowercase() == "true",
+        Err(_) => true,
+    }
 }
 
 #[cfg(target_os = "windows")]
 fn get_battery_info_windows() -> BatteryInfo {
-    // Would use GetSystemPowerStatus
+    // Use PowerShell to get battery information
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-Command",
+            "$b = [System.Windows.Forms.SystemInformation]::PowerStatus; \
+             \"{0}|{1}|{2}\" -f $b.BatteryLifePercent, $b.BatteryChargeStatus, $b.PowerLineStatus",
+        ])
+        .output();
+
+    let mut level = 100.0;
+    let mut charging = false;
+    let mut on_ac = true;
+    let mut time_remaining: i64 = -1;
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parts: Vec<&str> = stdout.trim().split('|').collect();
+        if parts.len() >= 3 {
+            if let Ok(pct) = parts[0].parse::<f64>() {
+                level = pct * 100.0; // BatteryLifePercent is 0.0-1.0
+            }
+            // PowerLineStatus: 0=Offline, 1=Online, 2=Unknown
+            on_ac = parts[2].trim() != "0";
+            charging = on_ac && level < 100.0;
+        }
+    }
+
     BatteryInfo {
-        level: 100.0,
-        charging: false,
-        on_ac: true,
-        time_remaining: -1,
+        level,
+        charging,
+        on_ac,
+        time_remaining,
     }
 }
 
 #[cfg(target_os = "windows")]
 fn get_idle_time_windows() -> i64 {
-    // Would use GetLastInputInfo
+    // Use PowerShell with user32.dll GetLastInputInfo
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-Command",
+            "Add-Type @'\\nusing System;\\nusing System.Runtime.InteropServices;\\npublic class Idle { [DllImport(\\\"user32.dll\\\")] static extern bool GetLastInputInfo(ref LASTINPUTINFO plii); [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; } public static int GetIdleSeconds() { LASTINPUTINFO lii = new LASTINPUTINFO(); lii.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO)); GetLastInputInfo(ref lii); return (Environment.TickCount - (int)lii.dwTime) / 1000; } }\\n'@; [Idle]::GetIdleSeconds()",
+        ])
+        .output();
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Ok(secs) = stdout.trim().parse::<i64>() {
+            return secs.max(0);
+        }
+    }
+
     0
 }

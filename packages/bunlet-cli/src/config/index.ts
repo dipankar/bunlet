@@ -2,70 +2,24 @@
  * Shared Bunlet CLI config loading.
  *
  * All CLI commands should load project configuration through this module so
- * config file resolution, package metadata fallback, and future normalization
+ * config file resolution, package metadata fallback, and Zod validation
  * happen in one place.
+ *
+ * The Zod schemas and TypeScript types are re-exported from the runtime
+ * package (`bunlet/config`) so there is a single source of truth.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
+import {
+  bunletConfigSchema,
+  parseConfig,
+  type BunletConfig,
+  type ConfigParseResult,
+} from 'bunlet/config';
 
-export interface BunletConfig {
-  main?: string;
-  preload?: string;
-  renderer?: {
-    root?: string;
-    index?: string;
-    entry?: string;
-  };
-  build?: {
-    outDir?: string;
-    minify?: boolean;
-    sourcemap?: boolean | 'inline' | 'external';
-    bytecode?: boolean;
-    external?: string[];
-    define?: Record<string, string>;
-  };
-  package?: {
-    name?: string;
-    version?: string;
-    description?: string;
-    author?: string;
-    icon?: string;
-    bundleId?: string;
-    category?: string;
-    mac?: {
-      category?: string;
-      target?: string[];
-      identity?: string;
-    };
-    win?: {
-      target?: string[];
-    };
-    linux?: {
-      target?: string[];
-      category?: string;
-      maintainer?: string;
-    };
-  };
-  webview?: {
-    engine?: 'system' | 'cef';
-    cef?: {
-      cachePath?: string;
-      remoteDebuggingPort?: number;
-      disableGpu?: boolean;
-    };
-  };
-  publish?: {
-    provider?: 'github' | 's3' | 'generic';
-    owner?: string;
-    repo?: string;
-    token?: string;
-    bucket?: string;
-    region?: string;
-    url?: string;
-  };
-}
+export type { BunletConfig, ConfigParseResult } from 'bunlet/config';
 
 export interface ProjectPackageJson {
   name?: string;
@@ -88,8 +42,21 @@ const CONFIG_FILES = [
 
 /**
  * Load project config from the current application root.
+ *
+ * Validates the loaded config with the shared Zod schema and returns the
+ * parsed result including any soft warnings.
  */
 export async function loadBunletConfig(root: string): Promise<BunletConfig> {
+  const { config } = await loadBunletConfigWithWarnings(root);
+  return config;
+}
+
+/**
+ * Load config and also return validation warnings.
+ */
+export async function loadBunletConfigWithWarnings(root: string): Promise<ConfigParseResult> {
+  let raw: unknown = {};
+
   for (const configFile of CONFIG_FILES) {
     const configPath = path.join(root, configFile);
 
@@ -99,17 +66,18 @@ export async function loadBunletConfig(root: string): Promise<BunletConfig> {
 
     try {
       if (configFile.endsWith('.json')) {
-        return JSON.parse(fs.readFileSync(configPath, 'utf-8')) as BunletConfig;
+        raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      } else {
+        const module = await import(pathToFileURL(configPath).href);
+        raw = module.default || module;
       }
-
-      const module = await import(pathToFileURL(configPath).href);
-      return (module.default || module) as BunletConfig;
+      break;
     } catch (error) {
       console.warn(`Warning: Failed to load ${configFile}:`, error);
     }
   }
 
-  return {};
+  return parseConfig(raw);
 }
 
 /**

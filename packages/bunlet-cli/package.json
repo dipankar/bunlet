@@ -19,7 +19,8 @@
     "ora": "^8.0.0",
     "fs-extra": "^11.2.0",
     "archiver": "^7.0.0",
-    "yaml": "^2.3.0"
+    "yaml": "^2.3.0",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

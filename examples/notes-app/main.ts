@@ -5,7 +5,8 @@
 import { app, BrowserWindow, Menu, z } from 'bunlet';
 import * as path from 'path';
 
-// Import IPC handlers (registers them on app)
+app.setName('Notes App');
+
 import './main/ipc-handlers';
 import { createAppMenu } from './main/menu';
 import { getStorage } from './main/storage';

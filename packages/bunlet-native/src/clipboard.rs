@@ -9,9 +9,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
 /// Global clipboard instance (thread-safe)
-static CLIPBOARD: Lazy<Mutex<Option<Clipboard>>> = Lazy::new(|| {
-    Mutex::new(Clipboard::new().ok())
-});
+static CLIPBOARD: Lazy<Mutex<Option<Clipboard>>> = Lazy::new(|| Mutex::new(Clipboard::new().ok()));
 
 /// Read text from the clipboard
 #[napi]
@@ -21,9 +19,14 @@ pub fn clipboard_read_text() -> Result<String> {
         .as_mut()
         .ok_or_else(|| Error::new(Status::GenericFailure, "Clipboard not available"))?;
 
-    clipboard
-        .get_text()
-        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to read clipboard: {}", e)))
+    match clipboard.get_text() {
+        Ok(text) => Ok(text),
+        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+        Err(e) => Err(Error::new(
+            Status::GenericFailure,
+            format!("Failed to read clipboard: {}", e),
+        )),
+    }
 }
 
 /// Write text to the clipboard
@@ -34,9 +37,12 @@ pub fn clipboard_write_text(text: String) -> Result<()> {
         .as_mut()
         .ok_or_else(|| Error::new(Status::GenericFailure, "Clipboard not available"))?;
 
-    clipboard
-        .set_text(text)
-        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to write to clipboard: {}", e)))
+    clipboard.set_text(text).map_err(|e| {
+        Error::new(
+            Status::GenericFailure,
+            format!("Failed to write to clipboard: {}", e),
+        )
+    })
 }
 
 /// Clear the clipboard
@@ -47,9 +53,12 @@ pub fn clipboard_clear() -> Result<()> {
         .as_mut()
         .ok_or_else(|| Error::new(Status::GenericFailure, "Clipboard not available"))?;
 
-    clipboard
-        .clear()
-        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to clear clipboard: {}", e)))
+    clipboard.clear().map_err(|e| {
+        Error::new(
+            Status::GenericFailure,
+            format!("Failed to clear clipboard: {}", e),
+        )
+    })
 }
 
 /// Check if clipboard has text content

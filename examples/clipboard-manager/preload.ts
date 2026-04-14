@@ -28,6 +28,6 @@ contextBridge.exposeInMainWorld('api', {
   onHistoryUpdated: (
     callback: (history: Array<{ text: string; timestamp: number }>) => void
   ) => {
-    ipcRenderer.on('history-updated', (_, data) => callback(data));
+    ipcRenderer.on('history-updated', (_event, data) => callback(data as Array<{ text: string; timestamp: number }>));
   },
 });

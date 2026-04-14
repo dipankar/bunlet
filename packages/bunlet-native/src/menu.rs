@@ -6,6 +6,7 @@ use muda::{
     accelerator::Accelerator, AboutMetadata, CheckMenuItem, Menu as MudaMenu, MenuEvent,
     MenuItem as MudaMenuItem, PredefinedMenuItem, Submenu,
 };
+use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use once_cell::sync::Lazy;
@@ -19,7 +20,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 static MENU_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 /// Global menu registry (wrapped in SendWrapper for thread safety)
-static MENUS: Lazy<Mutex<HashMap<u32, SendWrapper<MudaMenu>>>> =
+pub(crate) static MENUS: Lazy<Mutex<HashMap<u32, SendWrapper<MudaMenu>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Menu item ID to callback ID mapping
@@ -240,6 +241,7 @@ pub fn set_application_menu(menu_id: Option<u32>) -> bool {
 
     #[cfg(target_os = "macos")]
     {
+        #[allow(unused_imports)]
         use muda::MenuId;
 
         if let Some(id) = menu_id {
@@ -282,10 +284,13 @@ pub fn destroy_menu(menu_id: u32) -> bool {
 }
 
 /// Show a popup/context menu at position
+///
+/// **Not yet implemented**: Context menu popup requires native window
+/// integration that is not yet complete. This will return an error.
 #[napi]
-pub fn popup_menu(_menu_id: u32, _window_id: u32, _x: i32, _y: i32) -> bool {
-    // Context menus require window integration
-    // This would need to be implemented per-platform
-    // For now, return false to indicate not implemented
-    false
+pub fn popup_menu(_menu_id: u32, _window_id: u32, _x: i32, _y: i32) -> Result<bool> {
+    Err(Error::new(
+        Status::GenericFailure,
+        "popup_menu is not yet implemented. Context menus require native window integration.",
+    ))
 }

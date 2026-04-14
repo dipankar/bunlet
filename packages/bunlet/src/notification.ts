@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { assertRuntimeCapability, hasRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 
 /** Whether the callback has been set up */
@@ -95,6 +96,9 @@ export class Notification extends EventEmitter {
    * Check if notifications are supported on this platform
    */
   static isSupported(): boolean {
+    if (!hasRuntimeCapability('notifications')) {
+      return false;
+    }
     return native.notificationIsSupported();
   }
 
@@ -104,6 +108,7 @@ export class Notification extends EventEmitter {
    */
   constructor(options: NotificationOptions) {
     super();
+    assertRuntimeCapability('notifications', 'Notification');
     this.options = options;
     ensureCallbackInitialized();
   }
@@ -199,7 +204,6 @@ export class Notification extends EventEmitter {
   on(event: 'show', listener: () => void): this;
   on(event: 'click', listener: () => void): this;
   on(event: 'close', listener: () => void): this;
-  on(event: 'reply', listener: (event: unknown, reply: string) => void): this;
   on(event: 'action', listener: (event: unknown, index: number) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(event: string, listener: (...args: any[]) => void): this {

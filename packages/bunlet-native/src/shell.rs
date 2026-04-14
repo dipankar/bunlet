@@ -5,6 +5,8 @@
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+
+#[cfg(target_os = "linux")]
 use std::path::Path;
 use std::process::Command;
 

@@ -28,6 +28,6 @@ contextBridge.exposeInMainWorld('api', {
   onDirectoryChanged: (
     callback: (event: { type: string; paths: string[] }) => void
   ) => {
-    ipcRenderer.on('directory-changed', (_, data) => callback(data));
+    ipcRenderer.on('directory-changed', (_event, data) => callback(data as { type: string; paths: string[] }));
   },
 });

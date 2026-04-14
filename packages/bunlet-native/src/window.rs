@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::path::PathBuf;
-use tao::dpi::{LogicalPosition, LogicalSize};
+use tao::dpi::{LogicalSize, PhysicalPosition};
 
 use crate::{
     dispatch_navigation_event, dispatch_window_event, dispatch_window_title_event, next_window_id,
@@ -270,6 +270,8 @@ pub fn get_window_bounds(window_id: u32) -> Result<WindowBounds> {
 }
 
 /// Set window bounds
+/// When only position or only size is provided, the other dimension
+/// is read from the current window state so partial updates work correctly.
 #[napi]
 pub fn set_window_bounds(
     window_id: u32,
@@ -283,13 +285,22 @@ pub fn set_window_bounds(
         .get(&window_id)
         .ok_or_else(|| Error::new(Status::InvalidArg, format!("Window {} not found", window_id)))?;
 
-    if let (Some(x), Some(y)) = (x, y) {
+    // Position: apply when both x and y are provided, or when one is provided
+    // alongside the other. TAO requires setting position atomically.
+    if x.is_some() || y.is_some() {
+        let current = state.window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+        let px = x.unwrap_or(current.x);
+        let py = y.unwrap_or(current.y);
         state
             .window
-            .set_outer_position(LogicalPosition::new(x as f64, y as f64));
+            .set_outer_position(PhysicalPosition::new(px, py));
     }
 
-    if let (Some(w), Some(h)) = (width, height) {
+    // Size: apply when both width and height are provided, or when one is provided.
+    if width.is_some() || height.is_some() {
+        let current = state.window.inner_size();
+        let w = width.unwrap_or(current.width);
+        let h = height.unwrap_or(current.height);
         state
             .window
             .set_inner_size(LogicalSize::new(w as f64, h as f64));
@@ -388,6 +399,12 @@ pub fn get_focused_window_id() -> Option<u32> {
 }
 
 /// Execute JavaScript in WebView
+///
+/// **Important**: With the system webview backend (wry), `evaluate_script`
+/// is fire-and-forget — it does NOT return the script result. The caller
+/// will always receive an empty string. To obtain a return value from JS,
+/// use the IPC channel instead (have the script send the result via
+/// `window.__bunlet.send(channel, result)`).
 #[napi]
 pub async fn execute_java_script(window_id: u32, script: String) -> Result<String> {
     let windows = WINDOWS.lock();
@@ -400,9 +417,7 @@ pub async fn execute_java_script(window_id: u32, script: String) -> Result<Strin
         .evaluate_script(&script)
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
 
-    // Note: wry doesn't have a built-in way to get return values from evaluate_script
-    // This would need to be implemented via IPC for proper async return values
-    Ok("".to_string())
+    Ok(String::new())
 }
 
 // ============================================================================
@@ -530,4 +545,59 @@ pub fn is_devtools_open(window_id: u32) -> Result<bool> {
         .ok_or_else(|| Error::new(Status::InvalidArg, format!("Window {} not found", window_id)))?;
 
     Ok(state.webview.is_devtools_open())
+}
+
+// ============================================================================
+// Authoritative WebView State Queries
+// ============================================================================
+
+/// Get the current URL of the webview.
+///
+/// **Limitation**: The system webview backend (wry) does not support returning
+/// values from `evaluate_script`, so this cannot synchronously read
+/// `location.href`. The TypeScript layer tracks URL changes via navigation
+/// events (`WebContentsState`) instead.
+#[napi]
+pub fn webview_get_url(_window_id: u32) -> Result<String> {
+    Err(Error::new(
+        Status::GenericFailure,
+        "webview_get_url is not supported by the system webview backend; URL is tracked via navigation events",
+    ))
+}
+
+/// Get the page title.
+///
+/// **Limitation**: Same as `webview_get_url` — the system webview backend
+/// cannot return values from `evaluate_script`. The TypeScript layer tracks
+/// title changes via the `web-contents-title-updated` event.
+#[napi]
+pub fn webview_get_title(_window_id: u32) -> Result<String> {
+    Err(Error::new(
+        Status::GenericFailure,
+        "webview_get_title is not supported by the system webview backend; title is tracked via events",
+    ))
+}
+
+/// Check if the webview can navigate back.
+///
+/// **Limitation**: The system webview backend cannot return values from
+/// `evaluate_script`. The TypeScript layer tracks history state via
+/// `WebContentsState`.
+#[napi]
+pub fn webview_can_go_back(_window_id: u32) -> Result<bool> {
+    Err(Error::new(
+        Status::GenericFailure,
+        "webview_can_go_back is not supported by the system webview backend; history is tracked via WebContentsState",
+    ))
+}
+
+/// Check if the webview can navigate forward.
+///
+/// **Limitation**: Same as `webview_can_go_back`.
+#[napi]
+pub fn webview_can_go_forward(_window_id: u32) -> Result<bool> {
+    Err(Error::new(
+        Status::GenericFailure,
+        "webview_can_go_forward is not supported by the system webview backend; history is tracked via WebContentsState",
+    ))
 }

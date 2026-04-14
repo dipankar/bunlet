@@ -16,6 +16,9 @@ import {
   createModuleUpdate,
   createErrorUpdate,
 } from './hmr';
+import { ModuleGraph } from './module-graph';
+import { analyzeImports, collectSourceFiles } from './import-analyzer';
+import { getImportMetaHotPolyfill, rewriteImportMetaHot } from './hmr-polyfill';
 
 export interface DevServerOptions {
   port: number;
@@ -34,11 +37,12 @@ interface WebSocketData {
  * Development server with HMR support
  */
 export class DevServer {
-  private server: Server | null = null;
+  private server: Server<WebSocketData> | null = null;
   private watcher: FileWatcher | null = null;
   private clients: Set<ServerWebSocket<WebSocketData>> = new Set();
   private options: DevServerOptions;
   private clientIdCounter = 0;
+  private moduleGraph: ModuleGraph = new ModuleGraph();
 
   constructor(options: Partial<DevServerOptions> = {}) {
     this.options = {
@@ -117,6 +121,7 @@ export class DevServer {
 
     // Start file watcher if HMR is enabled
     if (hmr) {
+      this.populateModuleGraph();
       this.startWatcher();
     }
   }
@@ -162,6 +167,57 @@ export class DevServer {
   }
 
   /**
+   * Populate the module graph by scanning renderer source files
+   */
+  private populateModuleGraph(): void {
+    const rendererRoot = path.resolve(this.options.root, this.options.rendererDir);
+    if (!fs.existsSync(rendererRoot)) {
+      return;
+    }
+
+    const sourceFiles = collectSourceFiles(rendererRoot);
+    for (const filePath of sourceFiles) {
+      this.analyzeAndRegisterModule(filePath);
+    }
+
+    console.log(`[hmr] Module graph: ${this.moduleGraph.getModuleIds().length} modules`);
+  }
+
+  /**
+   * Analyze a single file and register it (and its imports) in the module graph
+   */
+  private analyzeAndRegisterModule(filePath: string): void {
+    const ext = path.extname(filePath);
+    const moduleType = ext === '.css' || ext === '.scss' || ext === '.less' ? 'css' as const
+      : ext === '.html' || ext === '.htm' ? 'html' as const
+      : 'js' as const;
+
+    const relativePath = path.relative(this.options.root, filePath).replace(/\\/g, '/');
+    const url = '/' + relativePath;
+
+    // Ensure the module exists in the graph
+    this.moduleGraph.ensureModule(filePath, url, moduleType);
+
+    // Analyze imports and register them
+    const { imports, acceptsHmr } = analyzeImports(filePath, this.options.root);
+    if (acceptsHmr) {
+      this.moduleGraph.acceptModule(filePath);
+    }
+
+    for (const importPath of imports) {
+      const importRelPath = path.relative(this.options.root, importPath).replace(/\\/g, '/');
+      const importUrl = '/' + importRelPath;
+      const importExt = path.extname(importPath);
+      const importType = importExt === '.css' || importExt === '.scss' || importExt === '.less' ? 'css' as const
+        : importExt === '.html' || importExt === '.htm' ? 'html' as const
+        : 'js' as const;
+
+      this.moduleGraph.ensureModule(importPath, importUrl, importType);
+      this.moduleGraph.addImport(filePath, importPath);
+    }
+  }
+
+  /**
    * Start the file watcher
    */
   private startWatcher(): void {
@@ -183,42 +239,76 @@ export class DevServer {
   private handleFileChange(change: FileChange): void {
     const { type, path: filePath, category } = change;
 
-    console.log(`[HMR] ${type}: ${filePath} (${category})`);
+    console.log(`[hmr] ${type}: ${filePath} (${category})`);
+
+    // Determine module type
+    const moduleType = filePath.endsWith('.css') ? 'css' as const
+      : filePath.endsWith('.html') || filePath.endsWith('.htm') ? 'html' as const
+      : filePath.endsWith('.js') || filePath.endsWith('.mjs') || filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? 'js' as const
+      : 'asset' as const;
+
+    // Update the module graph
+    const url = '/' + filePath.replace(/\\/g, '/');
+    const mod = this.moduleGraph.ensureModule(filePath, url, moduleType);
+    this.moduleGraph.updateModule(filePath);
+
+    // Re-analyze imports for the changed file
+    const { imports, acceptsHmr } = analyzeImports(
+      path.resolve(this.options.root, filePath),
+      this.options.root,
+    );
+    if (acceptsHmr) {
+      this.moduleGraph.acceptModule(filePath);
+    } else {
+      // If it previously accepted but no longer does, reset
+      const existing = this.moduleGraph.getModule(filePath);
+      if (existing && existing.isHmrAccepted) {
+        existing.isHmrAccepted = false;
+      }
+    }
+
+    // Re-register import relationships
+    for (const importPath of imports) {
+      this.moduleGraph.ensureModule(importPath, '/' + path.relative(this.options.root, importPath).replace(/\\/g, '/'), 'js');
+      this.moduleGraph.addImport(filePath, importPath);
+    }
 
     switch (category) {
       case 'config':
-        // Config changes require full restart
-        console.log('[HMR] Config changed - restart required');
+        console.log('[hmr] Config changed - restart required');
         this.broadcast(createUpdate('full-reload'));
         break;
 
       case 'main':
       case 'preload':
-        // Main/preload changes require full reload
+        console.log('[hmr] Main/preload changed - full reload');
         this.broadcast(createUpdate('full-reload'));
         break;
 
-      case 'renderer':
-        // Renderer changes can be hot-reloaded
-        if (filePath.endsWith('.css')) {
-          this.broadcast(
-            createUpdate('css-update', {
-              path: filePath,
-              updates: [createModuleUpdate(filePath, 'css-update')],
-            })
-          );
-        } else {
-          this.broadcast(
-            createUpdate('update', {
-              path: filePath,
-              updates: [createModuleUpdate(filePath, 'js-update')],
-            })
-          );
+      case 'renderer': {
+        // Use module graph to determine HMR strategy
+        const result = this.moduleGraph.resolveUpdate(filePath);
+
+        if (result.type === 'full-reload') {
+          console.log('[hmr] No accepting module found - full reload');
+          this.broadcast(createUpdate('full-reload'));
+        } else if (result.type === 'css-update') {
+          console.log('[hmr] CSS update:', filePath);
+          this.broadcast(createUpdate('css-update', {
+            path: filePath,
+            updates: result.updates,
+          }));
+        } else if (result.type === 'update') {
+          console.log('[hmr] Module hot update:', filePath, `(${result.updates.length} module(s))`);
+          this.broadcast(createUpdate('update', {
+            path: filePath,
+            updates: result.updates,
+          }));
         }
         break;
+      }
 
       default:
-        // Other files might need full reload
         if (type === 'change') {
           this.broadcast(createUpdate('full-reload'));
         }
@@ -278,6 +368,11 @@ export class DevServer {
     const file = Bun.file(filePath);
     let content = await file.text();
 
+    // Transform JS/TS files: inject import.meta.hot polyfill
+    if (this.options.hmr && this.isTransformable(filePath)) {
+      content = this.transformForHMR(content, filePath);
+    }
+
     // Inject HMR client script into HTML files
     if (filePath.endsWith('.html') && this.options.hmr) {
       content = this.injectHMRClient(content);
@@ -311,139 +406,76 @@ export class DevServer {
    * Get the HMR client script
    */
   private getHMRClientScript(): string {
-    return `
-// Bunlet HMR Client
-(function() {
-  const socket = new WebSocket('ws://' + location.host + '/__hmr');
-  let isConnected = false;
-
-  socket.onopen = () => {
-    isConnected = true;
-    console.log('[HMR] Connected');
-  };
-
-  socket.onmessage = (event) => {
+    // Try to load the compiled HMR client; fall back to the minimal inline client.
+    // The full client supports module-level hot accept/reject.
     try {
-      const data = JSON.parse(event.data);
-      handleUpdate(data);
-    } catch (e) {
-      console.error('[HMR] Failed to parse message:', e);
+      const clientPath = path.join(__dirname, 'hmr-client.js');
+      if (fs.existsSync(clientPath)) {
+        return fs.readFileSync(clientPath, 'utf-8');
+      }
+    } catch {
+      // Fall through to inline client
     }
-  };
 
-  socket.onclose = () => {
-    isConnected = false;
-    console.log('[HMR] Disconnected - attempting reconnect...');
-    setTimeout(() => {
-      location.reload();
-    }, 1000);
+    // Minimal inline fallback (for dev before hmr-client.ts is compiled)
+    return `
+// Bunlet HMR Client (inline fallback)
+(function() {
+  const socket = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__hmr');
+  socket.onopen = () => console.log('[hmr] connected');
+  socket.onmessage = (event) => {
+    try { const data = JSON.parse(event.data); handleUpdate(data); } catch(e) { console.error('[hmr] parse error:', e); }
   };
-
-  socket.onerror = (error) => {
-    console.error('[HMR] WebSocket error:', error);
-  };
+  socket.onclose = () => { console.log('[hmr] disconnected'); setTimeout(() => location.reload(), 1000); };
+  socket.onerror = () => console.error('[hmr] websocket error');
 
   function handleUpdate(data) {
     switch (data.type) {
-      case 'connected':
-        console.log('[HMR] Server connected');
-        break;
-
-      case 'full-reload':
-        console.log('[HMR] Full reload requested');
-        location.reload();
-        break;
-
-      case 'css-update':
-        console.log('[HMR] CSS update:', data.path);
-        updateCSS(data.path);
-        break;
-
-      case 'update':
-        console.log('[HMR] Module update:', data.path);
-        // For now, do full reload for JS changes
-        // TODO: Implement proper HMR acceptance
-        location.reload();
-        break;
-
-      case 'error':
-        console.error('[HMR] Build error:', data.error?.message);
-        showErrorOverlay(data.error);
-        break;
-
-      case 'prune':
-        // Module was removed
-        break;
+      case 'connected': console.log('[hmr] server connected'); break;
+      case 'full-reload': console.log('[hmr] full reload'); location.reload(); break;
+      case 'css-update': updateCSS(data); break;
+      case 'update': location.reload(); break;
+      case 'error': console.error('[hmr] error:', data.error); break;
     }
   }
 
-  function updateCSS(path) {
+  function updateCSS(data) {
+    if (!data.path) { location.reload(); return; }
     const links = document.querySelectorAll('link[rel="stylesheet"]');
     for (const link of links) {
       const href = link.getAttribute('href');
-      if (href && (href.includes(path) || path.includes(href))) {
-        const newHref = href.split('?')[0] + '?t=' + Date.now();
-        link.setAttribute('href', newHref);
+      if (href && (href.includes(data.path) || data.path.includes(href.replace(/^\\//, '')))) {
+        const newLink = document.createElement('link');
+        newLink.rel = 'stylesheet';
+        newLink.href = href.split('?')[0] + '?t=' + Date.now();
+        newLink.onload = () => link.remove();
+        link.parentNode.insertBefore(newLink, link.nextSibling);
         return;
       }
     }
-    // If no matching stylesheet found, reload
     location.reload();
   }
-
-  function showErrorOverlay(error) {
-    // Remove existing overlay
-    const existing = document.getElementById('bunlet-error-overlay');
-    if (existing) existing.remove();
-
-    if (!error) return;
-
-    const overlay = document.createElement('div');
-    overlay.id = 'bunlet-error-overlay';
-    overlay.style.cssText = \`
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.85);
-      color: #ff5555;
-      font-family: monospace;
-      font-size: 14px;
-      padding: 20px;
-      box-sizing: border-box;
-      overflow: auto;
-      z-index: 99999;
-    \`;
-
-    overlay.innerHTML = \`
-      <div style="max-width: 800px; margin: 0 auto;">
-        <h2 style="color: #ff5555; margin: 0 0 10px 0;">Build Error</h2>
-        <pre style="color: #fff; white-space: pre-wrap; word-wrap: break-word;">\${escapeHtml(error.message)}</pre>
-        \${error.file ? \`<p style="color: #888; margin-top: 10px;">File: \${escapeHtml(error.file)}</p>\` : ''}
-        \${error.stack ? \`<pre style="color: #888; margin-top: 10px; font-size: 12px;">\${escapeHtml(error.stack)}</pre>\` : ''}
-        <p style="color: #666; margin-top: 20px;">Fix the error and save the file to continue.</p>
-      </div>
-    \`;
-
-    overlay.onclick = () => overlay.remove();
-    document.body.appendChild(overlay);
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  // Expose for debugging
-  window.__bunletHMR = { socket, isConnected: () => isConnected };
 })();
 `;
+  }
+
+  /**
+   * Check if a file should be transformed for HMR
+   */
+  private isTransformable(filePath: string): boolean {
+    const ext = path.extname(filePath);
+    return ['.js', '.mjs', '.ts', '.tsx', '.jsx'].includes(ext);
+  }
+
+  /**
+   * Transform a JS/TS file for HMR:
+   * 1. Replace `import.meta.hot.accept()` calls with `__bunlet_hmr.accept()` calls
+   * 2. Inject the HMR polyfill at the top of the file
+   */
+  private transformForHMR(content: string, filePath: string): string {
+    const moduleId = '/' + path.relative(this.options.root, filePath).replace(/\\/g, '/');
+    const rewritten = rewriteImportMetaHot(content, moduleId);
+    return getImportMetaHotPolyfill(moduleId) + '\n' + rewritten;
   }
 
   /**

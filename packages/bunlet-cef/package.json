@@ -1,7 +1,7 @@
 {
   "name": "@bunlet/cef",
   "version": "0.1.0",
-  "description": "CEF backend bindings for Bunlet (experimental)",
+  "description": "CEF (Chromium Embedded Framework) backend for Bunlet",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
@@ -16,8 +16,16 @@
     "copy-artifact:debug": "bun ./scripts/copy-artifact.js debug",
     "test": "bun test"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "@bunlet/native": "workspace:*"
+  },
+  "peerDependencies": {
+    "@bunlet/native": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@bunlet/native": {
+      "optional": true
+    }
   },
   "files": [
     "index.js",

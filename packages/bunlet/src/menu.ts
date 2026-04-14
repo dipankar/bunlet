@@ -227,12 +227,10 @@ export class Menu {
    * Get the current application menu
    */
   static getApplicationMenu(): Menu | null {
-    const id = native.getApplicationMenu();
-    if (id === null || id === undefined) return null;
-
-    // We can't reconstruct the Menu object from just an ID
-    // Return null for now - this is a limitation
-    return null;
+    throw new Error(
+      `[bunlet] Menu.getApplicationMenu() is not yet supported. ` +
+      `Application menu reconstruction from native ID is not implemented.`
+    );
   }
 
   /**
@@ -274,7 +272,10 @@ export class Menu {
    * @param window - Window to close popup for
    */
   closePopup(_window?: BrowserWindow): void {
-    // Not implemented in native yet
+    throw new Error(
+      `[bunlet] Menu.closePopup() is not yet supported. ` +
+      `Context menu dismissal is not implemented.`
+    );
   }
 
   /**

@@ -18,10 +18,17 @@ const targetByPlatformArch = {
   'win32-x64': 'bunlet-cef.win32-x64-msvc.node',
 };
 
+const helperByPlatform = {
+  linux: 'bunlet-cef-helper',
+  darwin: 'bunlet-cef-helper',
+  win32: 'bunlet-cef-helper.exe',
+};
+
 const sourceName = sourceByPlatform[process.platform];
 const targetName = targetByPlatformArch[platformArch];
+const helperName = helperByPlatform[process.platform];
 
-if (!sourceName || !targetName) {
+if (!sourceName || !targetName || !helperName) {
   throw new Error(`Unsupported platform for CEF artifact copy: ${platformArch}`);
 }
 
@@ -42,3 +49,23 @@ if (!fs.existsSync(sourcePath)) {
 
 fs.copyFileSync(sourcePath, targetPath);
 console.log(`[bunlet-cef] Copied ${path.basename(sourcePath)} -> ${path.basename(targetPath)}`);
+
+// Copy the CEF helper binary alongside the .node file
+const helperSourcePath = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  'bunlet-cef-native',
+  'target',
+  mode,
+  helperName
+);
+const helperTargetPath = path.resolve(__dirname, '..', helperName);
+
+if (fs.existsSync(helperSourcePath)) {
+  fs.copyFileSync(helperSourcePath, helperTargetPath);
+  fs.chmodSync(helperTargetPath, 0o755);
+  console.log(`[bunlet-cef] Copied ${helperName} -> ${path.basename(helperTargetPath)}`);
+} else {
+  console.warn(`[bunlet-cef] WARNING: CEF helper binary not found at ${helperSourcePath}`);
+}

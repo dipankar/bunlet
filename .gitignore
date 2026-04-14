@@ -6,6 +6,9 @@ dist/
 packages/*/dist/
 packages/*/*.node
 examples/*/dist/
+examples/*/dist-*/
+examples/*/test-dist/
+*.bunlet-preload.js
 
 # Rust/Cargo
 packages/bunlet-native/target/

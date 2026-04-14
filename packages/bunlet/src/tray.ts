@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { assertRuntimeCapability } from './runtime/capabilities';
 import { native } from './runtime';
 import type { Rectangle } from './types';
 import type { Menu } from './menu';
@@ -62,6 +63,7 @@ export class Tray extends EventEmitter {
    */
   constructor(image: string) {
     super();
+    assertRuntimeCapability('tray', 'Tray');
     ensureTrayEventsInitialized();
 
     this.id = native.createTray(image);

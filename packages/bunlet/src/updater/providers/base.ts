@@ -177,31 +177,53 @@ export abstract class BaseProvider implements UpdateProvider {
   }
 
   /**
-   * Parse a version string into comparable parts
+   * Parse a version string into comparable parts.
+   * Pre-release tags (alpha, beta, rc) are treated as lower than the
+   * numeric part they attach to: 1.0.0-alpha < 1.0.0 < 1.0.1
    */
-  protected parseVersion(version: string): number[] {
-    return version
-      .replace(/^v/, '')
-      .split(/[.-]/)
-      .map((part) => parseInt(part, 10) || 0);
+  protected parseVersion(version: string): Array<{ num: number; pre?: string }> {
+    const stripped = version.replace(/^v/, '');
+    // Split on "."  then separate any "-" pre-release suffix
+    return stripped.split('.').map((segment) => {
+      const dashIdx = segment.indexOf('-');
+      if (dashIdx === -1) {
+        const num = parseInt(segment, 10);
+        return { num: Number.isNaN(num) ? 0 : num };
+      }
+      const num = parseInt(segment.slice(0, dashIdx), 10);
+      const pre = segment.slice(dashIdx + 1);
+      return { num: Number.isNaN(num) ? 0 : num, pre };
+    });
   }
 
   /**
-   * Compare two versions
+   * Compare two version strings.
    * Returns: -1 if a < b, 0 if a == b, 1 if a > b
+   * Pre-release versions sort before their release: 1.0.0-alpha < 1.0.0
    */
-  protected compareVersions(a: string, b: string): number {
+  compareVersions(a: string, b: string): number {
     const partsA = this.parseVersion(a);
     const partsB = this.parseVersion(b);
-
     const maxLength = Math.max(partsA.length, partsB.length);
 
     for (let i = 0; i < maxLength; i++) {
-      const numA = partsA[i] || 0;
-      const numB = partsB[i] || 0;
+      const pA = partsA[i] || { num: 0 };
+      const pB = partsB[i] || { num: 0 };
 
-      if (numA > numB) return 1;
-      if (numA < numB) return -1;
+      if (pA.num !== pB.num) {
+        return pA.num > pB.num ? 1 : -1;
+      }
+
+      // Same numeric part — a pre-release sorts before the release
+      const preA = pA.pre ?? null;
+      const preB = pB.pre ?? null;
+
+      if (preA === null && preB !== null) return 1;
+      if (preA !== null && preB === null) return -1;
+      if (preA !== null && preB !== null) {
+        const cmp = preA.localeCompare(preB);
+        if (cmp !== 0) return cmp;
+      }
     }
 
     return 0;

@@ -74,8 +74,8 @@ Welcome to the Bunlet documentation! Bunlet is a desktop application framework t
 
 ## Getting Help
 
-- [GitHub Issues](https://github.com/user/bunlet/issues) - Report bugs and request features
-- [Discussions](https://github.com/user/bunlet/discussions) - Ask questions and share ideas
+- [GitHub Issues](https://github.com/anomalyco/bunlet/issues) - Report bugs and request features
+- [Discussions](https://github.com/anomalyco/bunlet/discussions) - Ask questions and share ideas
 
 ## Contributing
 

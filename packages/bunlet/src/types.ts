@@ -104,7 +104,11 @@ export type PathName =
   | 'downloads'
   | 'music'
   | 'pictures'
-  | 'videos';
+  | 'videos'
+  | 'cache'
+  | 'data'
+  | 'dataLocal'
+  | 'runtime';
 
 /**
  * IPC context passed to handlers

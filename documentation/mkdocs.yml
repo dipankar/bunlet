@@ -1,8 +1,8 @@
 site_name: Bunlet
 site_description: Build desktop apps with Bun
 site_url: https://bunlet.dev
-repo_url: https://github.com/bunlet/bunlet
-repo_name: bunlet/bunlet
+repo_url: https://github.com/dipankar/bunlet
+repo_name: dipankar/bunlet
 
 theme:
   name: material
@@ -54,7 +54,7 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/bunlet/bunlet
+      link: https://github.com/dipankar/bunlet
 
 nav:
   - Home: index.md
@@ -65,6 +65,7 @@ nav:
   - Guides:
     - Windows: guides/windows.md
     - IPC Communication: guides/ipc.md
+    - Preload Scripts: guides/preload.md
     - Menus: guides/menus.md
     - Dialogs: guides/dialogs.md
     - Notifications: guides/notifications.md

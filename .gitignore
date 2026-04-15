@@ -5,6 +5,7 @@ node_modules/
 dist/
 packages/*/dist/
 packages/*/*.node
+packages/*/bunlet-cef-helper
 examples/*/dist/
 examples/*/dist-*/
 examples/*/test-dist/

@@ -38,11 +38,11 @@ interface BrowserWindowOptions {
   backgroundColor?: string;    // Default: '#ffffff'
 
   // macOS
-  titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover';
-  vibrancy?: string;           // macOS vibrancy effect
+  titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'; // Not yet implemented
+  vibrancy?: string;           // macOS vibrancy effect (Not yet implemented)
 
   // Windows
-  backgroundMaterial?: 'auto' | 'none' | 'mica' | 'acrylic' | 'tabbed';
+  backgroundMaterial?: 'auto' | 'none' | 'mica' | 'acrylic' | 'tabbed'; // Not yet implemented
 
   // Behavior
   resizable?: boolean;         // Default: true
@@ -335,17 +335,17 @@ Gets the window title.
 win.getTitle(): string
 ```
 
-#### `win.setAlwaysOnTop(flag, level?)`
+#### `win.setAlwaysOnTop(flag)`
 
 Makes window stay on top.
 
 ```typescript
-win.setAlwaysOnTop(flag: boolean, level?: string): void
+win.setAlwaysOnTop(flag: boolean): void
 ```
 
 #### `win.setBackgroundColor(color)`
 
-Sets background color.
+Sets background color. ⚠️ *Currently throws an error.*
 
 ```typescript
 win.setBackgroundColor(color: string): void
@@ -485,7 +485,7 @@ win.on('leave-full-screen', () => {});
 
 ### `ready-to-show`
 
-Emitted when content is ready to display.
+Emitted when content is ready to display. ⚠️ *Not emitted in the current implementation.*
 
 ```typescript
 const win = new BrowserWindow({ show: false });
@@ -548,6 +548,8 @@ const modal = new BrowserWindow({
 ```
 
 ### macOS Title Bar
+
+> Note: `titleBarStyle` and `vibrancy` are not yet implemented.
 
 ```typescript
 const win = new BrowserWindow({

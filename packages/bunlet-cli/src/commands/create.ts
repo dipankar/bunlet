@@ -6,6 +6,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readFileSync } from 'fs';
+
+const cliPkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf-8'));
 
 interface CreateOptions {
   template: string;
@@ -63,7 +66,7 @@ export async function createCommand(
       package: 'bunlet package',
     },
     dependencies: {
-      bunlet: '^0.3.0',
+      bunlet: `^${cliPkg.version}`,
     },
     devDependencies: options.typescript
       ? {

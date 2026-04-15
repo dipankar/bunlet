@@ -20,7 +20,7 @@ bun add -D @bunlet/cli
 | `bunlet dev` | Start development server |
 | `bunlet build` | Build for production |
 | `bunlet package` | Create distributables |
-| `bunlet icons` | Generate app icons |
+| `bunlet publish` | Publish a release |
 
 ## Global Options
 
@@ -33,8 +33,6 @@ Options:
   -v, --version       Show version number
   -h, --help          Show help
   --verbose           Enable verbose logging
-  --config <path>     Path to config file (default: bunlet.config.ts)
-  --cwd <dir>         Set working directory
 ```
 
 ## Command Reference
@@ -87,25 +85,10 @@ bunlet package --sign
 
 See [bunlet package](package.md) for details.
 
-### `bunlet icons`
-
-Generate app icons from a source image.
-
-```bash
-bunlet icons ./icon.png
-bunlet icons ./icon.svg --output ./resources
-```
-
-Generates:
-- `icon.icns` (macOS)
-- `icon.ico` (Windows)
-- `icons/` folder with multiple sizes (Linux)
-
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `BUNLET_CONFIG` | Path to config file |
 | `DEBUG` | Enable debug logging (`DEBUG=bunlet:*`) |
 | `NO_COLOR` | Disable colored output |
 
@@ -153,36 +136,9 @@ export default defineConfig({
 });
 ```
 
-Override with `--config`:
-```bash
-bunlet build --config ./config/production.ts
-```
-
-## Programmatic API
-
-Use the CLI programmatically:
-
-```typescript
-import { build, createPackage } from '@bunlet/cli';
-
-// Build
-await build({
-  target: 'darwin',
-  minify: true,
-});
-
-// Package
-await createPackage({
-  target: 'darwin',
-  format: ['dmg'],
-  sign: true,
-});
-```
-
 ## Related
 
 - [bunlet create](create.md)
 - [bunlet dev](dev.md)
 - [bunlet build](build.md)
 - [bunlet package](package.md)
-- [Advanced Usage](advanced.md)

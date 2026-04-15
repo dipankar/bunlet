@@ -8,6 +8,7 @@ import {
 
 function createTarget() {
   const emitted: Array<{ event: string; args: unknown[] }> = [];
+  let bounds: import('../types').Rectangle | undefined;
   const target: NativeWindowEventTarget & {
     windowTitle: string;
     pageTitle: string;
@@ -15,6 +16,7 @@ function createTarget() {
     destroyed: boolean;
     closeRequests: number;
     markClosedCalls: number;
+    getBounds(): import('../types').Rectangle | undefined;
   } = {
     windowTitle: 'Window',
     pageTitle: 'Window',
@@ -22,6 +24,9 @@ function createTarget() {
     destroyed: false,
     closeRequests: 0,
     markClosedCalls: 0,
+    getBounds(): import('../types').Rectangle | undefined {
+      return bounds;
+    },
     emit(event: string, ...args: unknown[]) {
       emitted.push({ event, args });
     },
@@ -57,6 +62,9 @@ function createTarget() {
       target.markClosedCalls += 1;
       target.emit('closed');
     },
+    updateBounds(b: import('../types').Rectangle) {
+      bounds = b;
+    },
   } satisfies NativeWindowEventTarget & {
     windowTitle: string;
     pageTitle: string;
@@ -64,6 +72,7 @@ function createTarget() {
     destroyed: boolean;
     closeRequests: number;
     markClosedCalls: number;
+    getBounds(): import('../types').Rectangle | undefined;
   };
 
   return { emitted, target };
@@ -240,6 +249,115 @@ describe('native window event handling', () => {
         args: [{ path: '/app/preload.js', message: 'SyntaxError: Unexpected token' }],
       },
     ]);
+  });
+});
+
+describe('bounds propagation for resize/move events', () => {
+  test('emits resize with bounds data', () => {
+    const { target, emitted } = createTarget();
+    const bounds = { x: 10, y: 20, width: 800, height: 600 };
+
+    applyNativeWindowEvent(target, {
+      event: 'window-resize',
+      windowId: 1,
+      bounds,
+    });
+
+    expect(target.getBounds()).toEqual(bounds);
+    expect(emitted).toEqual([{ event: 'resize', args: [bounds] }]);
+  });
+
+  test('emits resize without bounds when native omits them', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-resize',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'resize', args: [] }]);
+  });
+
+  test('emits move with bounds data', () => {
+    const { target, emitted } = createTarget();
+    const bounds = { x: 50, y: 75, width: 1024, height: 768 };
+
+    applyNativeWindowEvent(target, {
+      event: 'window-move',
+      windowId: 1,
+      bounds,
+    });
+
+    expect(target.getBounds()).toEqual(bounds);
+    expect(emitted).toEqual([{ event: 'move', args: [bounds] }]);
+  });
+});
+
+describe('window state change events', () => {
+  test('emits maximize event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-maximized',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'maximize', args: [] }]);
+  });
+
+  test('emits unmaximize event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-unmaximized',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'unmaximize', args: [] }]);
+  });
+
+  test('emits minimize event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-minimized',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'minimize', args: [] }]);
+  });
+
+  test('emits restore event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-restored',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'restore', args: [] }]);
+  });
+
+  test('emits enter-full-screen event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-entered-fullscreen',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'enter-full-screen', args: [] }]);
+  });
+
+  test('emits leave-full-screen event', () => {
+    const { target, emitted } = createTarget();
+
+    applyNativeWindowEvent(target, {
+      event: 'window-left-fullscreen',
+      windowId: 1,
+    });
+
+    expect(emitted).toEqual([{ event: 'leave-full-screen', args: [] }]);
   });
 });
 

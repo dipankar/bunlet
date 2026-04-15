@@ -2,10 +2,16 @@
 
 Build your first Bunlet app in 5 minutes.
 
+## Prerequisites
+
+- [Bun](https://bun.sh) 1.0+
+- [Rust](https://rustup.rs) stable 1.70+
+- Platform requirements (see [Installation](installation.md))
+
 ## Create a New App
 
 ```bash
-bun create bunlet my-app
+bunlet create my-app
 cd my-app
 ```
 
@@ -27,13 +33,14 @@ my-app/
 
 ```typescript
 import { app, BrowserWindow, z } from 'bunlet';
+import path from 'path';
 
 // Register an IPC handler
 app.handle(
   'greet',
   z.object({ name: z.string() }),
-  async ({ name }) => {
-    return `Hello, ${name}!`;
+  async (params) => {
+    return `Hello, ${params.name}!`;
   }
 );
 
@@ -54,12 +61,18 @@ const mainWindow = new BrowserWindow({
   title: 'My Bunlet App',
 });
 
-// Load the UI
-mainWindow.loadFile('index.html');
+// Load the UI (always use import.meta.dir for reliable path resolution)
+mainWindow.loadFile(path.join(import.meta.dir, 'index.html'));
 
 // Start the event loop
 app.run();
 ```
+
+!!! note "Handler signature"
+
+    The `app.handle()` callback receives `(params, context)` where `params` is the
+    Zod-validated input and `context` contains `{ window, windowId }`.
+    If your handler doesn't need the context, just use `(params)`.
 
 ### User Interface (`index.html`)
 
@@ -68,12 +81,6 @@ app.run();
 <html>
 <head>
   <title>My Bunlet App</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      padding: 2rem;
-    }
-  </style>
 </head>
 <body>
   <h1>Welcome to Bunlet!</h1>
@@ -84,9 +91,8 @@ app.run();
   <script>
     async function greet() {
       const name = document.getElementById('name').value;
+      // Use the injected IPC bridge
       const result = await window.__bunlet.invoke({
-        jsonrpc: '2.0',
-        id: Date.now().toString(),
         method: 'greet',
         params: { name }
       });
@@ -96,6 +102,11 @@ app.run();
 </body>
 </html>
 ```
+
+!!! tip "Using a preload script"
+
+    For production apps, use a preload script with `contextBridge` instead of
+    accessing `window.__bunlet` directly. See [Preload Scripts](../guides/preload.md).
 
 ## Run Your App
 
@@ -147,7 +158,24 @@ app.handle(
 );
 
 // Renderer: call the handler
-const result = await invoke('method-name', { /* params */ });
+const result = await window.__bunlet.invoke({
+  method: 'method-name',
+  params: { /* ... */ }
+});
+```
+
+### Main-to-Renderer Push
+
+Send messages from the main process to the renderer:
+
+```typescript
+// Main process
+win.webContents.send('my-event', { data: 42 });
+
+// Renderer
+window.__bunlet.on('my-event', (event, data) => {
+  console.log('Got data:', data);
+});
 ```
 
 ### Event Loop
@@ -157,5 +185,6 @@ The `app.run()` call blocks and runs the native event loop. All window creation 
 ## Next Steps
 
 - [Project Structure](project-structure.md) - Learn about the recommended app structure
+- [Preload Scripts](../guides/preload.md) - Secure API exposure with contextBridge
 - [Windows Guide](../guides/windows.md) - Deep dive into window management
 - [IPC Guide](../guides/ipc.md) - Advanced IPC patterns

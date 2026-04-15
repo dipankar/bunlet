@@ -78,7 +78,7 @@ app.isReady(): boolean
 Focuses the application.
 
 ```typescript
-app.focus(options?: { steal: boolean }): void
+app.focus(options?: { steal: boolean }): void ⚠️ *(Not yet implemented)*
 ```
 
 On macOS, activates the app. Use `steal: true` to focus even if another app has focus.
@@ -88,7 +88,7 @@ On macOS, activates the app. Use `steal: true` to focus even if another app has 
 Hides all application windows.
 
 ```typescript
-app.hide(): void
+app.hide(): void ⚠️ *(Not yet implemented)*
 ```
 
 ### `app.show()` (macOS)
@@ -96,7 +96,7 @@ app.hide(): void
 Shows application windows after they were hidden.
 
 ```typescript
-app.show(): void
+app.show(): void ⚠️ *(Not yet implemented)*
 ```
 
 ### `app.getName()`
@@ -142,7 +142,9 @@ app.getPath(name: PathName): string
 - `music` - Music directory
 - `pictures` - Pictures directory
 - `videos` - Videos directory
-- `logs` - Log files directory
+- `logs` - Log files directory **(NOT supported)**
+
+> **Note:** The paths `exe`, `cache`, `data`, `dataLocal`, and `runtime` ARE supported but not listed above.
 
 **Example:**
 ```typescript
@@ -157,7 +159,7 @@ const configPath = app.getPath('userData');
 Overrides a special directory path.
 
 ```typescript
-app.setPath(name: PathName, path: string): void
+app.setPath(name: PathName, path: string): void ⚠️ *(Not yet implemented)*
 ```
 
 ### `app.getAppPath()`
@@ -182,7 +184,7 @@ app.getLocale(): string
 Makes your app a single instance application.
 
 ```typescript
-app.requestSingleInstanceLock(additionalData?: object): boolean
+app.requestSingleInstanceLock(additionalData?: object): boolean ⚠️ *(Not yet implemented)*
 ```
 
 Returns `true` if lock was obtained.
@@ -209,7 +211,7 @@ if (!gotLock) {
 Returns whether app has the single instance lock.
 
 ```typescript
-app.hasSingleInstanceLock(): boolean
+app.hasSingleInstanceLock(): boolean ⚠️ *(Not yet implemented)*
 ```
 
 ### `app.releaseSingleInstanceLock()`
@@ -217,7 +219,7 @@ app.hasSingleInstanceLock(): boolean
 Releases the single instance lock.
 
 ```typescript
-app.releaseSingleInstanceLock(): void
+app.releaseSingleInstanceLock(): void ⚠️ *(Not yet implemented)*
 ```
 
 ### `app.handle(command, schema, handler)`
@@ -307,7 +309,7 @@ app.on('quit', (event, exitCode) => {
 
 ### `activate` (macOS)
 
-Emitted when app is activated (dock icon clicked).
+Emitted when app is activated (dock icon clicked). ⚠️ *May not fire on all platforms yet*
 
 ```typescript
 app.on('activate', (event, hasVisibleWindows) => {
@@ -319,7 +321,7 @@ app.on('activate', (event, hasVisibleWindows) => {
 
 ### `open-file` (macOS)
 
-Emitted when a file is opened with the app.
+Emitted when a file is opened with the app. ⚠️ *May not fire on all platforms yet*
 
 ```typescript
 app.on('open-file', (event, path) => {
@@ -329,7 +331,7 @@ app.on('open-file', (event, path) => {
 
 ### `open-url` (macOS)
 
-Emitted when a URL is opened with the app.
+Emitted when a URL is opened with the app. ⚠️ *May not fire on all platforms yet*
 
 ```typescript
 app.on('open-url', (event, url) => {
@@ -351,7 +353,7 @@ app.on('second-instance', (event, argv, workingDirectory, additionalData) => {
 
 ### `app.isPackaged`
 
-Whether the app is packaged (vs running in development).
+Whether the app is packaged (vs running in development). ⚠️ *(Not yet implemented)*
 
 ```typescript
 if (app.isPackaged) {

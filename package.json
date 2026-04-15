@@ -8,13 +8,18 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "bun run --filter '*' build",
+    "setup": "bun install && bun run build:native && bun run build:packages",
+    "build": "bun run build:packages",
     "build:native": "cd packages/bunlet-native && bun run build",
-    "dev": "bun run --filter bunlet-cli dev",
-    "test": "bun test",
-    "clean": "rm -rf packages/*/dist packages/*/*.node"
+    "build:cef": "cd packages/bunlet-cef-native && bun run build",
+    "build:packages": "cd packages/bunlet && bun run build && cd ../bunlet-cli && bun run build",
+    "dev": "bun run ./packages/bunlet-cli/src/cli.ts",
+    "test": "bun test packages/",
+    "doctor": "bun run scripts/doctor.ts",
+    "clean": "rm -rf packages/*/dist packages/*/*.node examples/*/*.bunlet-preload.js"
   },
   "devDependencies": {
+    "@bunlet/cli": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5.3.0"
   }

@@ -28,16 +28,11 @@
     }
   },
   "scripts": {
-    "build": "cargo build --release && bun run copy-artifact",
-    "build:debug": "cargo build && bun run copy-artifact:debug",
-    "copy-artifact": "cp target/release/libbunlet_native.so bunlet-native.linux-x64-gnu.node 2>/dev/null || cp target/release/libbunlet_native.dylib bunlet-native.darwin-arm64.node 2>/dev/null || cp target/release/bunlet_native.dll bunlet-native.win32-x64-msvc.node 2>/dev/null || true",
-    "copy-artifact:debug": "cp target/debug/libbunlet_native.so bunlet-native.linux-x64-gnu.node 2>/dev/null || cp target/debug/libbunlet_native.dylib bunlet-native.darwin-arm64.node 2>/dev/null || cp target/debug/bunlet_native.dll bunlet-native.win32-x64-msvc.node 2>/dev/null || true",
+    "build": "cargo build --release && bun run scripts/copy-artifact.js",
+    "build:debug": "cargo build && bun run scripts/copy-artifact.js debug",
     "test": "cargo test"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.0"
-  },
-  "engines": {
-    "node": ">= 18"
   }
 }

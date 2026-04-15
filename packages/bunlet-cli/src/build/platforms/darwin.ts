@@ -9,6 +9,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { generateInfoPlist, type AppManifest } from '../manifest';
 import { generateIconsForPlatform } from '../icons';
+import type { SignOptions } from '../packager';
 
 export interface DarwinBuildOptions {
   name: string;
@@ -20,11 +21,10 @@ export interface DarwinBuildOptions {
   icon?: string;
   buildDir: string;
   outDir: string;
-  sign?: {
-    identity: string;
-    entitlements?: string;
-    hardenedRuntime?: boolean;
-  };
+  sign?: boolean;
+  signOptions?: SignOptions;
+  /** Whether the build includes CEF runtime assets */
+  webviewEngine?: 'system' | 'cef';
 }
 
 export interface DarwinBuildResult {
@@ -77,12 +77,18 @@ export async function buildDarwinApp(
     );
 
     // Create launcher script that runs bun with the app
+    const cefLibPath = options.webviewEngine === 'cef'
+      ? '":"$RESOURCES_DIR/../Frameworks/cef/cef-binaries"'
+      : '';
     const launcherScript = `#!/bin/bash
 DIR="$(cd "$(dirname "\$0")" && pwd)"
 RESOURCES_DIR="$(dirname "\$DIR")/Resources"
 
 # Set library path for native addon
-export DYLD_LIBRARY_PATH="\$RESOURCES_DIR/app:\$DYLD_LIBRARY_PATH"
+export DYLD_LIBRARY_PATH="\$RESOURCES_DIR/app${cefLibPath}:\$DYLD_LIBRARY_PATH"
+
+# Set CEF helper path if using CEF backend
+${options.webviewEngine === 'cef' ? 'export BUNLET_CEF_HELPER_PATH="$RESOURCES_DIR/../Frameworks/cef/bunlet-cef-helper"' : ''}
 
 # Run with bun
 exec bun run "\$RESOURCES_DIR/app/main.js" "\$@"
@@ -103,8 +109,33 @@ exec bun run "\$RESOURCES_DIR/app/main.js" "\$@"
     const nativeAddon = path.join(buildDir, 'bunlet-native.node');
     if (fs.existsSync(nativeAddon)) {
       fs.copyFileSync(nativeAddon, path.join(frameworksDir, 'bunlet-native.node'));
-      // Also copy to app dir for require() to find it
       fs.copyFileSync(nativeAddon, path.join(appDir, 'bunlet-native.node'));
+    }
+
+    // Copy CEF runtime assets to Frameworks (helper process, .node binary, libraries)
+    if (options.webviewEngine === 'cef') {
+      const cefAddon = path.join(buildDir, 'bunlet-cef.node');
+      if (fs.existsSync(cefAddon)) {
+        fs.copyFileSync(cefAddon, path.join(frameworksDir, 'bunlet-cef.node'));
+        fs.copyFileSync(cefAddon, path.join(appDir, 'bunlet-cef.node'));
+      }
+
+      const cefModuleDir = path.join(buildDir, 'node_modules', '@bunlet', 'cef');
+      if (fs.existsSync(cefModuleDir)) {
+        const cefRuntimeDest = path.join(frameworksDir, 'cef');
+        if (!fs.existsSync(cefRuntimeDest)) {
+          fs.mkdirSync(cefRuntimeDest, { recursive: true });
+        }
+        const cefHelper = path.join(cefModuleDir, 'bunlet-cef-helper');
+        if (fs.existsSync(cefHelper)) {
+          fs.copyFileSync(cefHelper, path.join(cefRuntimeDest, 'bunlet-cef-helper'));
+          fs.chmodSync(path.join(cefRuntimeDest, 'bunlet-cef-helper'), 0o755);
+        }
+        const cefBinaries = path.join(cefModuleDir, 'cef-binaries');
+        if (fs.existsSync(cefBinaries)) {
+          copyDirSync(cefBinaries, path.join(cefRuntimeDest, 'cef-binaries'));
+        }
+      }
     }
 
     // Generate icon
@@ -121,9 +152,9 @@ exec bun run "\$RESOURCES_DIR/app/main.js" "\$@"
     }
 
     // Sign if requested
-    if (options.sign) {
+    if (options.sign && options.signOptions?.identity) {
       try {
-        await signApp(appPath, options.sign);
+        await signApp(appPath, options.signOptions);
       } catch (e) {
         console.warn(`Warning: Code signing failed: ${e}`);
       }
@@ -217,9 +248,11 @@ export async function createDmg(
  */
 async function signApp(
   appPath: string,
-  options: NonNullable<DarwinBuildOptions['sign']>
+  options: NonNullable<DarwinBuildOptions['signOptions']>
 ): Promise<void> {
-  const { identity, entitlements, hardenedRuntime = true } = options;
+  const identity = options.identity || '';
+  const entitlements = options.entitlements;
+  const hardenedRuntime = options.hardenedRuntime ?? true;
 
   let codesignArgs = [
     'codesign',

@@ -20,7 +20,7 @@ export { screen } from './screen';
 export { fileWatcher, FileWatcher } from './file-watcher';
 
 // Phase 5: Auto-Updater
-export { autoUpdater, AutoUpdater } from './auto-updater';
+export { autoUpdater, AutoUpdater, DarwinInstallStrategy, WindowsInstallStrategy, LinuxInstallStrategy } from './auto-updater';
 
 // Type exports
 export type {
@@ -65,10 +65,32 @@ export type {
   ProgressInfo,
   UpdateCheckResult,
   UpdateConfig,
+  ArtifactMetadata,
+  InstallStrategy,
+  InstallOptions,
+  InstallResult,
+  StagedRolloutPolicy,
+  RolloutCheckResult,
+  ProviderFactory,
+  UpdateProvider,
+  BlockMap,
+  BlockInfo,
+  UpdateManifest,
 } from './updater/types';
 
 // Context Bridge (for preload scripts)
 export { contextBridge, ipcRenderer } from './context-bridge';
+
+// Preload lifecycle utilities
+export { preload, isPreloadContext, onPreloadSuccess, onPreloadError } from './preload';
+
+// Restart state persistence
+export {
+  saveRestartState,
+  loadRestartState,
+  collectWindowState,
+} from './restart';
+export type { WindowRestoreState, RestartState } from './restart';
 
 // Session/Cookies
 export { Session, Cookies, session } from './session';
@@ -93,3 +115,11 @@ export type { BunletConfig } from './config';
 // Runtime backend
 export { runtime } from './runtime';
 export type { RuntimeBackend, RuntimeCapabilities } from './runtime';
+
+// Debug logging and diagnostics
+export { createLogger, collectDiagnostics, printDiagnostics } from './debug';
+export type { Logger, LogLevel } from './debug';
+
+// Performance budgets (for CI and release gating)
+export { performanceBudgets, binarySizeBudgets, coverageTargets } from './performance-budgets';
+export type { PerformanceBudget, BinarySizeBudget, CoverageTarget } from './performance-budgets';

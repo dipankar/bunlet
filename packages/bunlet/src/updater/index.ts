@@ -1,6 +1,3 @@
-/**
- * Auto-Updater Module
- */
-
 export * from './types';
-export * from './providers';
+export { BaseProvider, GitHubProvider, GenericProvider } from './providers';
+export type { ProgressCallback } from './providers';

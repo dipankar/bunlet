@@ -9,7 +9,7 @@
     "bunlet": "./bin/bunlet.js"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun && bun build ./src/cli.ts --outfile ./dist/cli.js --target bun",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun && bun build ./src/cli.ts --outfile ./dist/cli.js --target bun --no-bundle",
     "dev": "bun run ./src/cli.ts"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ import {
 import { ModuleGraph } from './module-graph';
 import { analyzeImports, collectSourceFiles } from './import-analyzer';
 import { getImportMetaHotPolyfill, rewriteImportMetaHot } from './hmr-polyfill';
+import { createIdentitySourceMap, composeSourceMaps, appendSourceMapComment, type SourceMapInput } from '../build/sourcemap';
 
 export interface DevServerOptions {
   port: number;
@@ -42,6 +43,7 @@ export class DevServer {
   private clients: Set<ServerWebSocket<WebSocketData>> = new Set();
   private options: DevServerOptions;
   private clientIdCounter = 0;
+  private transformedSourceMaps: Map<string, SourceMapInput> = new Map();
   private moduleGraph: ModuleGraph = new ModuleGraph();
 
   constructor(options: Partial<DevServerOptions> = {}) {
@@ -86,6 +88,16 @@ export class DevServer {
           return new Response(this.getHMRClientScript(), {
             headers: { 'Content-Type': 'application/javascript' },
           });
+        }
+
+        // Serve dev source maps for transformed files
+        if (url.pathname.endsWith('.map') && this.options.hmr) {
+          const sm = this.transformedSourceMaps.get(url.pathname);
+          if (sm) {
+            return new Response(JSON.stringify(sm), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
         }
 
         // Serve static files
@@ -141,6 +153,7 @@ export class DevServer {
     }
 
     this.clients.clear();
+    this.transformedSourceMaps.clear();
   }
 
   /**
@@ -475,7 +488,25 @@ export class DevServer {
   private transformForHMR(content: string, filePath: string): string {
     const moduleId = '/' + path.relative(this.options.root, filePath).replace(/\\/g, '/');
     const rewritten = rewriteImportMetaHot(content, moduleId);
-    return getImportMetaHotPolyfill(moduleId) + '\n' + rewritten;
+    const polyfill = getImportMetaHotPolyfill(moduleId);
+    const polyfillLineCount = polyfill.split('\n').length;
+    const transformed = polyfill + '\n' + rewritten;
+
+    if (this.options.hmr) {
+      const originalMap = createIdentitySourceMap(moduleId, content, filePath);
+      const composed = composeSourceMaps(
+        moduleId,
+        polyfillLineCount,
+        null,
+        originalMap,
+        content,
+      );
+      const mapPath = moduleId + '.map';
+      this.transformedSourceMaps.set(mapPath, composed);
+      return appendSourceMapComment(transformed, mapPath);
+    }
+
+    return transformed;
   }
 
   /**

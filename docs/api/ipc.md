@@ -55,7 +55,7 @@ app.handle(
 ```typescript
 interface IPCContext {
   window: BrowserWindow;  // Calling window
-  sender: WebContents;    // Sender's webContents
+  windowId: number;    // ID of the calling window
 }
 ```
 
@@ -131,7 +131,7 @@ Exposes APIs to the renderer's `window` object.
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet/renderer';
+import { contextBridge, ipcRenderer } from 'bunlet';
 
 contextBridge.exposeInMainWorld('api', {
   // Invoke main process handlers
@@ -421,7 +421,7 @@ app.whenReady().then(() => {
 ### preload.ts
 
 ```typescript
-import { contextBridge, ipcRenderer } from 'bunlet/renderer';
+import { contextBridge, ipcRenderer } from 'bunlet';
 
 contextBridge.exposeInMainWorld('api', {
   readFile: (path: string) =>

@@ -283,10 +283,27 @@ const result = await win.webContents.executeJavaScript(
 
 ## Sending Messages
 
+Use `webContents.send()` or `win.send()` to push data to the renderer:
+
 ```typescript
-// Send to renderer
-win.send('channel-name', arg1, arg2);
+// Main process - send via webContents
+win.webContents.send('status-update', { status: 'ready', progress: 100 });
+
+// Or shorthand via BrowserWindow
+win.send('status-update', { status: 'ready', progress: 100 });
 ```
+
+```javascript
+// Renderer - listen with __bunlet
+window.__bunlet.on('status-update', (event, data) => {
+  console.log(data.status, data.progress);
+});
+```
+
+!!! tip
+
+    For production apps, expose typed listeners via a preload script
+    instead of using `window.__bunlet.on()` directly. See [Preload Scripts](preload.md).
 
 ## Next Steps
 

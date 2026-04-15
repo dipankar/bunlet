@@ -15,13 +15,18 @@ import { devCommand } from './commands/dev';
 import { buildCommand } from './commands/build';
 import { packageCommand } from './commands/package';
 import { publishCommand } from './commands/publish';
+import { doctorCommand } from './commands/doctor';
+import { parseSourcemapOption } from './commands/build';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
 
 const program = new Command();
 
 program
   .name('bunlet')
   .description('Build cross-platform desktop apps with Bun and WebView')
-  .version('0.5.0');
+  .version(pkg.version);
 
 // Create command
 program
@@ -54,7 +59,9 @@ program
   .option('--outdir <dir>', 'Output directory', './dist')
   .option('--minify', 'Minify output', true)
   .option('--no-minify', 'Disable minification')
-  .option('--sourcemap', 'Generate source maps', false)
+  .option('--sourcemap [type]', 'Generate source maps (true, inline, external)', (val: string) => {
+    return parseSourcemapOption(val);
+  }, false)
   .option('--webview <engine>', 'WebView engine override (system, cef)')
   .action(buildCommand);
 
@@ -78,5 +85,11 @@ program
   .option('--dry-run', 'Preview without uploading')
   .option('--release-notes <file>', 'Path to release notes file')
   .action(publishCommand);
+
+// Doctor command
+program
+  .command('doctor')
+  .description('Check development environment and print diagnostics')
+  .action(doctorCommand);
 
 program.parse();

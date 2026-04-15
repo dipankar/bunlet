@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: darwin
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win32
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run benchmark tests
+        run: bun test packages/bunlet/src/benchmark.test.ts
+
+  rust-check:
+    name: Rust check
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/bunlet-native -> target
+            packages/bunlet-cef-native -> target
+
+      - name: Check bunlet-native
+        run: cargo check
+        working-directory: packages/bunlet-native
+
+      - name: Check bunlet-cef-native
+        run: cargo check
+        working-directory: packages/bunlet-cef-native
+
+  build-native:
+    name: Build native (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin-arm64
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win32-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/bunlet-native -> target
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build native addon
+        run: cd packages/bunlet-native && bun run build
+
+      - name: Upload native addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunlet-native-${{ matrix.platform }}
+          path: |
+            packages/bunlet-native/*.node
+
+  binary-size:
+    name: Binary size report
+    runs-on: macos-latest
+    needs: [build-native]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download native addon
+        uses: actions/download-artifact@v4
+        with:
+          name: bunlet-native-darwin-arm64
+          path: packages/bunlet-native
+
+      - name: Measure binary sizes
+        run: |
+          echo "## Binary Size Report" >> $GITHUB_STEP_SUMMARY
+          echo "| Asset | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Native addon
+          NATIVE_SIZE=$(stat -f%z packages/bunlet-native/*.node 2>/dev/null || echo "0")
+          echo "| bunlet-native (macOS ARM64) | $(numfmt --to=iec $NATIVE_SIZE 2>/dev/null || echo "${NATIVE_SIZE} bytes") |" >> $GITHUB_STEP_SUMMARY
+          
+          # Core runtime bundle
+          cd packages/bunlet
+          BUILD_SIZE=$(wc -c < dist/index.js 2>/dev/null || echo "0")
+          echo "| bunlet runtime | $(numfmt --to=iec $BUILD_SIZE 2>/dev/null || echo "${BUILD_SIZE} bytes") |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check size budgets
+        run: |
+          # Budget: native addon should be under 5MB on macOS ARM64
+          NATIVE_SIZE=$(stat -f%z packages/bunlet-native/*.node 2>/dev/null || echo "0")
+          BUDGET=$((5 * 1024 * 1024))
+          if [ "$NATIVE_SIZE" -gt "$BUDGET" ]; then
+            echo "::warning::Native addon exceeds 5MB budget (${NATIVE_SIZE} bytes)"
+          fi

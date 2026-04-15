@@ -1,74 +1,77 @@
-/**
- * AutoUpdater
- *
- * Automatic update system for Bunlet applications.
- */
-
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import type {
   UpdateInfo,
   UpdateCheckResult,
   ProgressInfo,
   UpdateConfig,
   AutoUpdaterEventMap,
+  InstallStrategy,
+  InstallOptions,
+  InstallResult,
+  StagedRolloutPolicy,
+  RolloutCheckResult,
+  ProviderFactory,
+  UpdateProvider,
+  UpdateFile,
 } from './updater/types';
-import type { UpdateProvider } from './updater/providers/base';
 import { GitHubProvider } from './updater/providers/github';
 import { GenericProvider } from './updater/providers/generic';
 import { BaseProvider } from './updater/providers/base';
 
-/**
- * Shell-quote a string for safe use in shell commands.
- * Wraps the string in single quotes and escapes any embedded single quotes.
- */
 function shellQuote(str: string): string {
   return `'${str.replace(/'/g, "'\\''")}'`;
 }
 
-/**
- * AutoUpdater class
- */
 export class AutoUpdater extends EventEmitter {
-  /** Automatically download updates when available */
   autoDownload = true;
-
-  /** Automatically install updates when app quits */
   autoInstallOnAppQuit = true;
-
-  /** Allow downgrading to older versions */
   allowDowngrade = false;
-
-  /** Release channel */
   channel: 'stable' | 'beta' | 'alpha' = 'stable';
 
   private provider: UpdateProvider | null = null;
+  private providerFactory: ProviderFactory | null = null;
   private config: UpdateConfig | null = null;
   private currentVersion: string;
   private updateInfo: UpdateInfo | null = null;
   private downloadedPath: string | null = null;
+  private downloadedFileInfo: UpdateFile | null = null;
   private updateDir: string;
+  private installStrategies: Map<string, InstallStrategy> = new Map();
+  private rolloutPolicy: StagedRolloutPolicy | null = null;
 
   constructor() {
     super();
     this.currentVersion = this.getCurrentVersion();
     this.updateDir = path.join(os.tmpdir(), 'bunlet-updates');
+    this.registerDefaultInstallStrategies();
   }
 
-  /**
-   * Set update configuration
-   */
   setFeedURL(config: UpdateConfig): void {
     this.config = config;
     this.channel = config.channel || 'stable';
     this.provider = this.createProvider(config);
   }
 
-  /**
-   * Check for updates
-   */
+  setProviderFactory(factory: ProviderFactory): void {
+    this.providerFactory = factory;
+  }
+
+  setProvider(provider: UpdateProvider): void {
+    this.provider = provider;
+  }
+
+  registerInstallStrategy(platform: string, strategy: InstallStrategy): void {
+    this.installStrategies.set(platform, strategy);
+  }
+
+  setRolloutPolicy(policy: StagedRolloutPolicy): void {
+    this.rolloutPolicy = policy;
+  }
+
   async checkForUpdates(): Promise<UpdateCheckResult> {
     if (!this.provider) {
       throw new Error('Update feed URL not set. Call setFeedURL first.');
@@ -88,7 +91,18 @@ export class AutoUpdater extends EventEmitter {
         return result;
       }
 
-      const comparison = this.compareVersions(updateInfo.version, this.currentVersion);
+      if (this.rolloutPolicy) {
+        const rolloutCheck = this.evaluateRollout(this.rolloutPolicy, updateInfo);
+        if (!rolloutCheck.isEligible) {
+          this.emit('update-not-available', updateInfo);
+          return {
+            updateInfo,
+            isAvailable: false,
+          };
+        }
+      }
+
+      const comparison = versionComparer.compareVersions(updateInfo.version, this.currentVersion);
       const isAvailable = comparison > 0 || (this.allowDowngrade && comparison < 0);
 
       if (isAvailable) {
@@ -113,29 +127,21 @@ export class AutoUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Check for updates and show notification
-   */
   async checkForUpdatesAndNotify(): Promise<UpdateCheckResult> {
     const result = await this.checkForUpdates();
 
     if (result.isAvailable && result.updateInfo) {
-      // Could integrate with native notifications here
       console.log(`Update available: ${result.updateInfo.version}`);
     }
 
     return result;
   }
 
-  /**
-   * Download the update
-   */
   async downloadUpdate(): Promise<string[]> {
     if (!this.provider || !this.updateInfo) {
       throw new Error('No update available to download');
     }
 
-    // Create update directory
     if (!fs.existsSync(this.updateDir)) {
       fs.mkdirSync(this.updateDir, { recursive: true });
     }
@@ -157,10 +163,10 @@ export class AutoUpdater extends EventEmitter {
         }
       );
 
-      // Verify artifact integrity against manifest hashes before accepting the download
       await this.verifyUpdateIntegrity(destPath, file);
 
       this.downloadedPath = destPath;
+      this.downloadedFileInfo = file;
       this.emit('update-downloaded', this.updateInfo);
 
       return [destPath];
@@ -171,53 +177,49 @@ export class AutoUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Quit and install the update
-   */
-  quitAndInstall(isSilent = false, isForceRunAfter = false): void {
+  async quitAndInstall(isSilent = false, isForceRunAfter = false): Promise<void> {
     if (!this.downloadedPath) {
       throw new Error('No update downloaded');
     }
 
-    // Re-verify integrity before installation
-    const file = this.updateInfo?.files[0];
+    const file = this.downloadedFileInfo || this.updateInfo?.files[0];
     if (file?.sha512) {
-      try {
-        const hash = this.calculateSHA512(this.downloadedPath);
-        if (hash !== file.sha512) {
-          throw new Error(
-            `Update integrity check failed before install.\n` +
-            `Expected: ${file.sha512}\n` +
-            `Actual: ${hash}\n` +
-            `File: ${this.downloadedPath}\n` +
-            `The download may have been tampered with. Aborting installation.`
-          );
-        }
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('integrity check failed')) {
-          throw err;
-        }
-        // If we can't verify (e.g. no crypto), warn but proceed
-        console.warn('[bunlet] Warning: Could not re-verify update integrity before install:', err);
+      const hash = this.calculateSHA512(this.downloadedPath);
+      if (hash !== file.sha512) {
+        throw new Error(
+          `Update integrity check failed before install.\n` +
+          `Expected: ${file.sha512}\n` +
+          `Actual: ${hash}\n` +
+          `File: ${this.downloadedPath}\n` +
+          `The download may have been tampered with. Aborting installation.`
+        );
       }
     }
 
-    // Platform-specific installation
     const platform = process.platform;
-    const downloadedPath = this.downloadedPath;
+    const strategy = this.installStrategies.get(platform);
 
-    if (platform === 'darwin') {
-      this.installMacOS(downloadedPath, isSilent);
-    } else if (platform === 'win32') {
-      this.installWindows(downloadedPath, isSilent, isForceRunAfter);
-    } else if (platform === 'linux') {
-      this.installLinux(downloadedPath, isSilent);
+    if (strategy) {
+      const installOptions: InstallOptions = {
+        isSilent,
+        isForceRunAfter,
+        appName: this.updateInfo?.artifact?.appName,
+      };
+
+      const result = await strategy.install(
+        this.downloadedPath,
+        file || { url: this.downloadedPath, sha512: '', size: 0 },
+        installOptions
+      );
+
+      if (result.requiresRestart) {
+        process.exit(0);
+      }
+    } else {
+      throw new Error(`No install strategy registered for platform: ${platform}`);
     }
   }
 
-  /**
-   * Verify the downloaded file's integrity against the manifest hash
-   */
   private async verifyUpdateIntegrity(
     filePath: string,
     fileInfo: { sha512?: string; url: string }
@@ -229,7 +231,6 @@ export class AutoUpdater extends EventEmitter {
 
     const hash = this.calculateSHA512(filePath);
     if (hash !== fileInfo.sha512) {
-      // Delete the corrupted file
       try {
         fs.unlinkSync(filePath);
       } catch {
@@ -250,9 +251,6 @@ export class AutoUpdater extends EventEmitter {
     this.emit('update-verified', { file: path.basename(fileInfo.url), hash });
   }
 
-  /**
-   * Calculate SHA-512 hash of a file
-   */
   private calculateSHA512(filePath: string): string {
     const data = fs.readFileSync(filePath);
     const hasher = new Bun.CryptoHasher('sha512');
@@ -260,11 +258,7 @@ export class AutoUpdater extends EventEmitter {
     return hasher.digest('hex');
   }
 
-  /**
-   * Get the current app version
-   */
   private getCurrentVersion(): string {
-    // Try to get version from package.json
     try {
       const packagePath = path.join(process.cwd(), 'package.json');
       if (fs.existsSync(packagePath)) {
@@ -275,7 +269,6 @@ export class AutoUpdater extends EventEmitter {
       // Ignore
     }
 
-    // Try environment variable
     if (process.env.npm_package_version) {
       return process.env.npm_package_version;
     }
@@ -283,10 +276,11 @@ export class AutoUpdater extends EventEmitter {
     return '0.0.0';
   }
 
-  /**
-   * Create update provider from config
-   */
   private createProvider(config: UpdateConfig): UpdateProvider {
+    if (this.providerFactory) {
+      return this.providerFactory.createProvider(config);
+    }
+
     switch (config.provider) {
       case 'github':
         if (!config.github) {
@@ -307,7 +301,6 @@ export class AutoUpdater extends EventEmitter {
         });
 
       case 's3':
-        // S3 provider uses generic provider with S3 URL
         if (!config.s3) {
           throw new Error('S3 provider requires s3 config');
         }
@@ -322,151 +315,45 @@ export class AutoUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Compare two versions using shared semver-lite logic.
-   * Delegates to BaseProvider.compareVersions for consistency with update providers.
-   */
+  private registerDefaultInstallStrategies(): void {
+    this.installStrategies.set('darwin', new DarwinInstallStrategy(this.updateDir));
+    this.installStrategies.set('win32', new WindowsInstallStrategy());
+    this.installStrategies.set('linux', new LinuxInstallStrategy());
+  }
+
   private compareVersions(a: string, b: string): number {
     return versionComparer.compareVersions(a, b);
   }
 
-  /**
-   * Install update on macOS
-   */
-  private installMacOS(updatePath: string, isSilent: boolean): void {
-    const ext = path.extname(updatePath).toLowerCase();
+  private evaluateRollout(policy: StagedRolloutPolicy, info: UpdateInfo): RolloutCheckResult {
+    const userId = policy.userId || this.getMachineId();
+    const bucket = this.computeBucket(userId, info.version);
+    const evaluatedPercentage = Math.min(100, Math.max(0, policy.rolloutPercentage));
+    const isEligible = bucket < evaluatedPercentage;
 
-    if (ext === '.dmg') {
-      const mountResults = require('child_process').execSync(
-        `hdiutil attach ${shellQuote(updatePath)} -nobrowse -quiet`,
-        { encoding: 'utf-8', stdio: isSilent ? 'ignore' : 'pipe' }
-      );
-
-      const volumeMatch = mountResults.match(/\/Volumes\/[^\n]+/);
-      if (!volumeMatch) {
-        throw new Error('Failed to mount DMG: could not find volume path');
-      }
-      const volume = volumeMatch[0].trim();
-
-      try {
-        const apps = fs.readdirSync(volume).filter((f) => f.endsWith('.app'));
-        if (apps.length > 0) {
-          const appPath = path.join(volume, apps[0]);
-          const destPath = `/Applications/${apps[0]}`;
-          if (fs.existsSync(destPath)) {
-            fs.rmSync(destPath, { recursive: true, force: true });
-          }
-          fs.cpSync(appPath, destPath, { recursive: true });
-
-          try {
-            require('child_process').execSync(
-              `osascript -e 'tell application "System Events" to quit application ${shellQuote(process.title || 'bunlet')}'`,
-              { stdio: isSilent ? 'ignore' : 'inherit' }
-            );
-          } catch {
-            // Ignore failure to quit the current app
-          }
-
-          require('child_process').execSync(`open ${shellQuote(destPath)}`, {
-            stdio: isSilent ? 'ignore' : 'inherit',
-          });
-        }
-      } finally {
-        require('child_process').execSync(`hdiutil detach ${shellQuote(volume)} -quiet`, {
-          stdio: 'ignore',
-        });
-      }
-    } else if (ext === '.zip') {
-      const { execSync } = require('child_process') as typeof import('child_process');
-      const tempDir = path.join(this.updateDir, 'unzip');
-
-      execSync(`unzip -o ${shellQuote(updatePath)} -d ${shellQuote(tempDir)}`, { stdio: 'ignore' });
-
-      const apps = fs.readdirSync(tempDir).filter((f) => f.endsWith('.app'));
-      if (apps.length > 0) {
-        const appPath = path.join(tempDir, apps[0]);
-        const destPath = `/Applications/${apps[0]}`;
-        if (fs.existsSync(destPath)) {
-          fs.rmSync(destPath, { recursive: true, force: true });
-        }
-        fs.cpSync(appPath, destPath, { recursive: true });
-        execSync(`open ${shellQuote(destPath)}`, { stdio: 'ignore' });
-      }
-    }
-
-    process.exit(0);
+    return {
+      isEligible,
+      evaluatedPercentage,
+      userBucket: bucket,
+    };
   }
 
-  /**
-   * Install update on Windows
-   */
-  private installWindows(updatePath: string, isSilent: boolean, isForceRunAfter: boolean): void {
-    const ext = path.extname(updatePath).toLowerCase();
-    const { spawn } = require('child_process') as typeof import('child_process');
-
-    if (ext === '.exe') {
-      const args = isSilent ? ['/S'] : [];
-      if (isForceRunAfter) {
-        args.push('/run');
-      }
-
-      spawn(updatePath, args, {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
-    } else if (ext === '.msi') {
-      const args = ['msiexec', '/i', updatePath];
-      if (isSilent) {
-        args.push('/quiet');
-      }
-
-      spawn(args[0], args.slice(1), {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
-    }
-
-    process.exit(0);
+  private computeBucket(userId: string, version: string): number {
+    const hash = crypto.createHash('sha256').update(`${userId}:${version}`).digest('hex');
+    return parseInt(hash.slice(0, 8), 16) % 100;
   }
 
-  /**
-   * Install update on Linux
-   */
-  private installLinux(updatePath: string, isSilent: boolean): void {
-    const ext = path.extname(updatePath).toLowerCase();
-
-    if (ext === '.appimage') {
-      // Replace AppImage
-      const currentPath = process.execPath;
-      fs.chmodSync(updatePath, 0o755);
-      const backupPath = currentPath + '.bak';
-      try {
-        fs.renameSync(currentPath, backupPath);
-        fs.renameSync(updatePath, currentPath);
-      } catch {
-        // If rename fails (e.g. across filesystems), use copy
-        fs.copyFileSync(updatePath, currentPath);
-        try { fs.unlinkSync(updatePath); } catch { /* ignore */ }
-      }
-
-      // Restart
-      const { spawn } = require('child_process') as typeof import('child_process');
-      spawn(currentPath, [], {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
-    } else if (ext === '.deb') {
-      const { spawn } = require('child_process') as typeof import('child_process');
-      spawn('sudo', ['dpkg', '-i', updatePath], {
-        detached: true,
-        stdio: isSilent ? 'ignore' : 'inherit',
-      }).unref();
+  private getMachineId(): string {
+    try {
+      const machineId = crypto.createHash('sha256')
+        .update(os.hostname() + os.userInfo().username)
+        .digest('hex');
+      return machineId;
+    } catch {
+      return 'unknown';
     }
-
-    process.exit(0);
   }
 
-  // Type-safe event emitter methods
   on<K extends keyof AutoUpdaterEventMap>(
     event: K,
     listener: AutoUpdaterEventMap[K]
@@ -489,15 +376,235 @@ export class AutoUpdater extends EventEmitter {
   }
 }
 
-/**
- * Singleton instance
- */
+export class DarwinInstallStrategy implements InstallStrategy {
+  private updateDir: string;
+
+  constructor(updateDir: string) {
+    this.updateDir = updateDir;
+  }
+
+  supportsFile(ext: string): boolean {
+    return ['.dmg', '.zip', '.pkg'].includes(ext);
+  }
+
+  async install(
+    updatePath: string,
+    fileInfo: UpdateFile,
+    options: InstallOptions
+  ): Promise<InstallResult> {
+    const ext = path.extname(updatePath).toLowerCase();
+
+    if (ext === '.dmg') {
+      return this.installFromDmg(updatePath, options);
+    } else if (ext === '.zip') {
+      return this.installFromZip(updatePath, options);
+    } else if (ext === '.pkg') {
+      return this.installPkg(updatePath, options);
+    }
+
+    throw new Error(`Unsupported macOS update format: ${ext}`);
+  }
+
+  private async installFromDmg(updatePath: string, options: InstallOptions): Promise<InstallResult> {
+    const mountResults = require('child_process').execSync(
+      `hdiutil attach ${shellQuote(updatePath)} -nobrowse -quiet`,
+      { encoding: 'utf-8', stdio: options.isSilent ? 'ignore' : 'pipe' }
+    );
+
+    const volumeMatch = mountResults.match(/\/Volumes\/[^\n]+/);
+    if (!volumeMatch) {
+      throw new Error('Failed to mount DMG: could not find volume path');
+    }
+    const volume = volumeMatch[0].trim();
+
+    try {
+      const apps = fs.readdirSync(volume).filter((f: string) => f.endsWith('.app'));
+      if (apps.length > 0) {
+        const appPath = path.join(volume, apps[0]);
+        const destPath = `/Applications/${apps[0]}`;
+        if (fs.existsSync(destPath)) {
+          fs.rmSync(destPath, { recursive: true, force: true });
+        }
+        fs.cpSync(appPath, destPath, { recursive: true });
+
+        try {
+          require('child_process').execSync(
+            `osascript -e 'tell application "System Events" to quit application ${shellQuote(process.title || 'bunlet')}'`,
+            { stdio: options.isSilent ? 'ignore' : 'inherit' }
+          );
+        } catch {
+          // Ignore failure to quit the current app
+        }
+
+        require('child_process').execSync(`open ${shellQuote(destPath)}`, {
+          stdio: options.isSilent ? 'ignore' : 'inherit',
+        });
+
+        return { requiresRestart: true, installedPath: destPath };
+      }
+    } finally {
+      require('child_process').execSync(`hdiutil detach ${shellQuote(volume)} -quiet`, {
+        stdio: 'ignore',
+      });
+    }
+
+    return { requiresRestart: true };
+  }
+
+  private async installFromZip(updatePath: string, options: InstallOptions): Promise<InstallResult> {
+    const { execSync } = require('child_process') as typeof import('child_process');
+    const tempDir = path.join(this.updateDir, 'unzip');
+
+    execSync(`unzip -o ${shellQuote(updatePath)} -d ${shellQuote(tempDir)}`, { stdio: 'ignore' });
+
+    const apps = fs.readdirSync(tempDir).filter((f: string) => f.endsWith('.app'));
+    if (apps.length > 0) {
+      const appPath = path.join(tempDir, apps[0]);
+      const destPath = `/Applications/${apps[0]}`;
+      if (fs.existsSync(destPath)) {
+        fs.rmSync(destPath, { recursive: true, force: true });
+      }
+      fs.cpSync(appPath, destPath, { recursive: true });
+      execSync(`open ${shellQuote(destPath)}`, { stdio: 'ignore' });
+      return { requiresRestart: true, installedPath: destPath };
+    }
+
+    return { requiresRestart: true };
+  }
+
+  private async installPkg(updatePath: string, options: InstallOptions): Promise<InstallResult> {
+    const args = ['-pkg', updatePath, '-target', '/'];
+    if (options.isSilent) {
+      args.push('-quiet');
+    }
+
+    require('child_process').execSync(`installer ${args.map(shellQuote).join(' ')}`, {
+      stdio: options.isSilent ? 'ignore' : 'inherit',
+    });
+
+    return { requiresRestart: true };
+  }
+}
+
+export class WindowsInstallStrategy implements InstallStrategy {
+  supportsFile(ext: string): boolean {
+    return ['.exe', '.msi'].includes(ext);
+  }
+
+  async install(
+    updatePath: string,
+    fileInfo: UpdateFile,
+    options: InstallOptions
+  ): Promise<InstallResult> {
+    const ext = path.extname(updatePath).toLowerCase();
+    const { spawn } = require('child_process') as typeof import('child_process');
+
+    if (ext === '.exe') {
+      const args: string[] = options.isSilent ? ['/S'] : [];
+      if (options.isForceRunAfter) {
+        args.push('/run');
+      }
+
+      spawn(updatePath, args, {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+
+      return {
+        requiresRestart: true,
+        restartCommand: [updatePath, ...args],
+      };
+    } else if (ext === '.msi') {
+      const args = ['msiexec', '/i', updatePath];
+      if (options.isSilent) {
+        args.push('/quiet');
+      }
+
+      spawn(args[0], args.slice(1), {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+
+      return {
+        requiresRestart: true,
+        restartCommand: args,
+      };
+    }
+
+    throw new Error(`Unsupported Windows update format: ${ext}`);
+  }
+}
+
+export class LinuxInstallStrategy implements InstallStrategy {
+  supportsFile(ext: string): boolean {
+    return ['.appimage', '.deb', '.rpm'].includes(ext);
+  }
+
+  async install(
+    updatePath: string,
+    fileInfo: UpdateFile,
+    options: InstallOptions
+  ): Promise<InstallResult> {
+    const ext = path.extname(updatePath).toLowerCase();
+
+    if (ext === '.appimage') {
+      return this.installAppImage(updatePath);
+    } else if (ext === '.deb') {
+      return this.installDeb(updatePath, options);
+    } else if (ext === '.rpm') {
+      return this.installRpm(updatePath, options);
+    }
+
+    throw new Error(`Unsupported Linux update format: ${ext}`);
+  }
+
+  private async installAppImage(updatePath: string): Promise<InstallResult> {
+    const currentPath = process.execPath;
+    fs.chmodSync(updatePath, 0o755);
+    const backupPath = currentPath + '.bak';
+    try {
+      fs.renameSync(currentPath, backupPath);
+      fs.renameSync(updatePath, currentPath);
+    } catch {
+      fs.copyFileSync(updatePath, currentPath);
+      try { fs.unlinkSync(updatePath); } catch { /* ignore */ }
+    }
+
+    const { spawn } = require('child_process') as typeof import('child_process');
+    spawn(currentPath, [], {
+      detached: true,
+      stdio: 'ignore',
+    }).unref();
+
+    return {
+      requiresRestart: true,
+      installedPath: currentPath,
+    };
+  }
+
+  private async installDeb(updatePath: string, options: InstallOptions): Promise<InstallResult> {
+    const { spawn } = require('child_process') as typeof import('child_process');
+    spawn('sudo', ['dpkg', '-i', updatePath], {
+      detached: true,
+      stdio: options.isSilent ? 'ignore' : 'inherit',
+    }).unref();
+
+    return { requiresRestart: true };
+  }
+
+  private async installRpm(updatePath: string, options: InstallOptions): Promise<InstallResult> {
+    const { spawn } = require('child_process') as typeof import('child_process');
+    spawn('sudo', ['rpm', '-Uvh', updatePath], {
+      detached: true,
+      stdio: options.isSilent ? 'ignore' : 'inherit',
+    }).unref();
+
+    return { requiresRestart: true };
+  }
+}
+
 export const autoUpdater = new AutoUpdater();
 
-/**
- * Shared version comparer — a minimal BaseProvider subclass used only
- * for the compareVersions method so AutoUpdater doesn't duplicate the logic.
- */
 class VersionComparer extends BaseProvider {
   constructor() { super(); }
   async getLatestVersion() { return null; }

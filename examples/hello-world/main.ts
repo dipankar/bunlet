@@ -3,6 +3,7 @@
  */
 
 import { app, BrowserWindow, z } from 'bunlet';
+import path from 'path';
 
 // Register IPC handlers (synchronous, runs immediately)
 app.handle(
@@ -45,7 +46,7 @@ const mainWindow = new BrowserWindow({
 });
 
 // Load the HTML file
-mainWindow.loadFile('index.html');
+mainWindow.loadFile(path.join(import.meta.dir, 'index.html'));
 
 // Handle window events
 mainWindow.on('close', () => {

@@ -212,13 +212,10 @@ autoUpdater.on('download-progress', (progress) => {
 
 ```javascript
 // Renderer
-window.__bunlet.onMessage((data) => {
-  const parsed = JSON.parse(data);
-  if (parsed.channel === 'update-progress') {
-    const { percent } = parsed.args[0];
-    progressBar.style.width = `${percent}%`;
-    progressText.textContent = `${percent.toFixed(1)}%`;
-  }
+window.__bunlet.on('update-progress', (event, data) => {
+  const { percent } = data;
+  progressBar.style.width = `${percent}%`;
+  progressText.textContent = `${percent.toFixed(1)}%`;
 });
 ```
 

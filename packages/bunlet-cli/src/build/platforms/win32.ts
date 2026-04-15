@@ -9,6 +9,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { generateWindowsManifest, type AppManifest } from '../manifest';
 import { generateIconsForPlatform } from '../icons';
+import type { SignOptions } from '../packager';
 
 export interface Win32BuildOptions {
   name: string;
@@ -18,11 +19,10 @@ export interface Win32BuildOptions {
   icon?: string;
   buildDir: string;
   outDir: string;
-  sign?: {
-    certificateFile: string;
-    certificatePassword: string;
-    timestampServer?: string;
-  };
+  sign?: boolean;
+  signOptions?: SignOptions;
+  /** Whether the build includes CEF runtime assets */
+  webviewEngine?: 'system' | 'cef';
 }
 
 export interface Win32BuildResult {
@@ -59,6 +59,30 @@ export async function buildWin32Folder(
     const nativeAddon = path.join(buildDir, 'bunlet-native.node');
     if (fs.existsSync(nativeAddon)) {
       fs.copyFileSync(nativeAddon, path.join(appDir, 'bunlet-native.node'));
+    }
+
+    // Copy CEF runtime assets
+    if (options.webviewEngine === 'cef') {
+      const cefAddon = path.join(buildDir, 'bunlet-cef.node');
+      if (fs.existsSync(cefAddon)) {
+        fs.copyFileSync(cefAddon, path.join(appDir, 'bunlet-cef.node'));
+      }
+
+      const cefModuleDir = path.join(buildDir, 'node_modules', '@bunlet', 'cef');
+      if (fs.existsSync(cefModuleDir)) {
+        const cefRuntimeDest = path.join(resourcesDir, 'cef');
+        if (!fs.existsSync(cefRuntimeDest)) {
+          fs.mkdirSync(cefRuntimeDest, { recursive: true });
+        }
+        const cefHelper = path.join(cefModuleDir, 'bunlet-cef-helper.exe');
+        if (fs.existsSync(cefHelper)) {
+          fs.copyFileSync(cefHelper, path.join(cefRuntimeDest, 'bunlet-cef-helper.exe'));
+        }
+        const cefBinaries = path.join(cefModuleDir, 'cef-binaries');
+        if (fs.existsSync(cefBinaries)) {
+          copyDirSync(cefBinaries, path.join(cefRuntimeDest, 'cef-binaries'));
+        }
+      }
     }
 
     // Create launcher batch script
@@ -151,9 +175,9 @@ export async function buildWin32Exe(
     }
 
     // Sign if requested and on Windows
-    if (options.sign && process.platform === 'win32') {
+    if (options.sign && process.platform === 'win32' && options.signOptions?.certificateFile) {
       try {
-        await signExe(exePath, options.sign);
+        await signExe(exePath, options.signOptions);
       } catch (e) {
         console.warn(`Warning: Code signing failed: ${e}`);
       }
@@ -228,9 +252,11 @@ export async function createWin32Zip(
  */
 async function signExe(
   exePath: string,
-  options: NonNullable<Win32BuildOptions['sign']>
+  options: NonNullable<Win32BuildOptions['signOptions']>
 ): Promise<void> {
-  const { certificateFile, certificatePassword, timestampServer } = options;
+  const certificateFile = options.certificateFile || '';
+  const certificatePassword = options.certificatePassword || '';
+  const timestampServer = options.timestampServer || 'http://timestamp.digicert.com';
 
   const signtoolArgs = [
     'signtool',

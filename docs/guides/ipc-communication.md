@@ -23,7 +23,7 @@ app.handle('greet',
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet/renderer';
+import { contextBridge, ipcRenderer } from 'bunlet';
 
 contextBridge.exposeInMainWorld('api', {
   greet: (name: string) => ipcRenderer.invoke('greet', { name }),

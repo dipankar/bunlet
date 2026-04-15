@@ -657,6 +657,7 @@ export class BrowserWindow extends EventEmitter {
         isDestroyed: () => this.state.isDestroyed(),
         requestClose: () => this.requestClose(),
         markClosed: () => this.markClosed(),
+        updateBounds: (bounds) => this.state.updateBounds(bounds),
       },
       event
     );

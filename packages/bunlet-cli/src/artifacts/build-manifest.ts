@@ -10,6 +10,17 @@ export interface BuildArtifactPaths {
   packageJson: string;
   nativeRuntime?: string;
   cefRuntime?: string;
+  /** Detailed CEF runtime asset paths (helper binary, cef-binaries dir) */
+  cefRuntimeAssets?: {
+    helperBinary?: string;
+    cefBinariesDir?: string;
+    nodeBinary?: string;
+  };
+  icons?: {
+    icns?: string;
+    ico?: string;
+    png?: string;
+  };
 }
 
 export interface BuildArtifactManifest {
@@ -21,6 +32,7 @@ export interface BuildArtifactManifest {
     webviewEngine: 'system' | 'cef';
   };
   paths: BuildArtifactPaths;
+  sourcemaps?: string[];
 }
 
 export function createBuildArtifactManifest(input: {
@@ -28,6 +40,7 @@ export function createBuildArtifactManifest(input: {
   version: string;
   webviewEngine: 'system' | 'cef';
   paths: BuildArtifactPaths;
+  sourcemaps?: string[];
 }): BuildArtifactManifest {
   return {
     schemaVersion: 1,
@@ -38,6 +51,7 @@ export function createBuildArtifactManifest(input: {
       webviewEngine: input.webviewEngine,
     },
     paths: input.paths,
+    sourcemaps: input.sourcemaps,
   };
 }
 
@@ -99,6 +113,48 @@ export function validateBuildArtifactManifest(
     const cefRuntimePath = path.join(outDir, manifest.paths.cefRuntime);
     if (!fs.existsSync(cefRuntimePath)) {
       errors.push(`Missing CEF runtime artifact: ${manifest.paths.cefRuntime}`);
+    }
+  }
+
+  if (manifest.paths.cefRuntimeAssets) {
+    const assets = manifest.paths.cefRuntimeAssets;
+    if (assets.helperBinary) {
+      const helperPath = path.join(outDir, assets.helperBinary);
+      if (!fs.existsSync(helperPath)) {
+        errors.push(`Missing CEF helper binary: ${assets.helperBinary}`);
+      }
+    }
+    if (assets.cefBinariesDir) {
+      const binariesDir = path.join(outDir, assets.cefBinariesDir);
+      if (!fs.existsSync(binariesDir)) {
+        errors.push(`Missing CEF binaries directory: ${assets.cefBinariesDir}`);
+      }
+    }
+    if (assets.nodeBinary) {
+      const nodePath = path.join(outDir, assets.nodeBinary);
+      if (!fs.existsSync(nodePath)) {
+        errors.push(`Missing CEF node binary: ${assets.nodeBinary}`);
+      }
+    }
+  }
+
+  if (manifest.sourcemaps) {
+    for (const sm of manifest.sourcemaps) {
+      const smPath = path.join(outDir, sm);
+      if (!fs.existsSync(smPath)) {
+        errors.push(`Missing source map artifact: ${sm}`);
+      }
+    }
+  }
+
+  if (manifest.paths.icons) {
+    for (const [format, iconPath] of Object.entries(manifest.paths.icons)) {
+      if (iconPath) {
+        const fullPath = path.join(outDir, iconPath);
+        if (!fs.existsSync(fullPath)) {
+          errors.push(`Missing icon artifact (${format}): ${iconPath}`);
+        }
+      }
     }
   }
 

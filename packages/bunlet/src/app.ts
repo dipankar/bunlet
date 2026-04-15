@@ -123,6 +123,12 @@ class App extends EventEmitter {
       title: event.title,
       url: event.url,
       bounds: event.bounds,
+      scaleFactor: event.scaleFactor,
+      theme: event.theme,
+      files: event.files,
+      preloadPath: event.preloadPath,
+      errorMessage: event.errorMessage,
+      errorStack: event.errorStack,
     });
   }
 
@@ -359,9 +365,23 @@ class App extends EventEmitter {
   }
 
   /**
-   * Get standard path
+   * Get standard path, with backend contract fallback.
+   *
+   * Tries the native module first, then falls back to a JS implementation.
    */
   getPath(name: PathName): string {
+    // Try native backend first
+    if (typeof native.getPath === 'function') {
+      try {
+        const result = native.getPath(name);
+        if (typeof result === 'string' && result.length > 0) {
+          return result;
+        }
+      } catch {
+        // Fall through to JS fallback
+      }
+    }
+
     const home = os.homedir();
 
     switch (name) {
@@ -392,6 +412,32 @@ class App extends EventEmitter {
         return path.join(home, 'Pictures');
       case 'videos':
         return path.join(home, 'Videos');
+      case 'cache':
+        if (process.platform === 'darwin') {
+          return path.join(home, 'Library', 'Caches', this.appName);
+        } else if (process.platform === 'win32') {
+          return path.join(home, 'AppData', 'Local', this.appName, 'Cache');
+        }
+        return process.env.XDG_CACHE_HOME || path.join(home, '.cache');
+      case 'data':
+        if (process.platform === 'darwin') {
+          return path.join(home, 'Library', 'Application Support', this.appName);
+        } else if (process.platform === 'win32') {
+          return process.env.APPDATA || path.join(home, 'AppData', 'Roaming', this.appName);
+        }
+        return process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+      case 'dataLocal':
+        if (process.platform === 'darwin') {
+          return path.join(home, 'Library', 'Application Support', this.appName);
+        } else if (process.platform === 'win32') {
+          return process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local', this.appName);
+        }
+        return process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+      case 'runtime':
+        if (process.platform === 'linux') {
+          return process.env.XDG_RUNTIME_DIR || path.join('/run', 'user', String(process.getuid?.() ?? 0));
+        }
+        return os.tmpdir();
       default:
         throw new Error(`Unknown path name: ${name}`);
     }

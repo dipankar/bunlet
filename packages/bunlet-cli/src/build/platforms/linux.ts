@@ -20,6 +20,8 @@ export interface LinuxBuildOptions {
   buildDir: string;
   outDir: string;
   maintainer?: string;
+  /** Whether the build includes CEF runtime assets */
+  webviewEngine?: 'system' | 'cef';
 }
 
 export interface LinuxBuildResult {
@@ -58,13 +60,22 @@ export async function buildAppImage(
     // Copy app files
     copyDirSync(buildDir, appDir);
 
+    // Build CEF lib path segment
+    const cefLibPath = options.webviewEngine === 'cef'
+      ? ':$APP_DIR/node_modules/@bunlet/cef/cef-binaries'
+      : '';
+    const cefHelperEnv = options.webviewEngine === 'cef'
+      ? '\nexport BUNLET_CEF_HELPER_PATH="$APP_DIR/node_modules/@bunlet/cef/bunlet-cef-helper"'
+      : '';
+
     // Create launcher script
     const launcherScript = `#!/bin/bash
 DIR="$(dirname "$(readlink -f "\$0")")"
 APP_DIR="\$DIR/../share/app"
 
 # Set library path for native addon
-export LD_LIBRARY_PATH="\$APP_DIR:\$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="\$APP_DIR${cefLibPath}:\$LD_LIBRARY_PATH"
+${cefHelperEnv}
 
 # Run with bun
 exec bun run "\$APP_DIR/main.js" "\$@"

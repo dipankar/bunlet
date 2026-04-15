@@ -15,6 +15,8 @@ import {
   writeReleaseArtifactManifest,
   type ReleaseArtifact,
 } from '../artifacts/release-manifest';
+import { generateBlockMapFile } from '../build/blockmap';
+import { generateUpdateManifestsForRelease } from '../artifacts/update-manifest';
 import { buildDarwinApp, createDmg } from '../build/platforms/darwin';
 import { buildLinux } from '../build/platforms/linux';
 import { buildWin32 } from '../build/platforms/win32';
@@ -93,9 +95,14 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
     platforms.push(process.platform);
   }
 
+  const webviewEngine = buildManifest?.app.webviewEngine || 'system';
+
   console.log(`  Platforms: ${platforms.join(', ')}\n`);
+  if (webviewEngine === 'cef') {
+    console.log('  WebView: CEF (Chromium Embedded Framework)');
+  }
   if (options.sign) {
-    console.warn('  ⚠ --sign is not implemented yet; building unsigned artifacts.');
+    console.log('  Signing: enabled');
   }
 
   const normalizedFormat = options.format?.toLowerCase();
@@ -142,26 +149,31 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
 
     try {
       switch (platform) {
-        case 'darwin':
-          {
-          const targets = resolveTargets('darwin', config.package?.mac?.target || ['app', 'dmg']);
-          if (targets.length === 0) break;
-          await buildForDarwin(
-            {
-              name: appName,
-              version: appVersion,
-              description: appDescription,
-              author: appAuthor,
-              icon: appIcon || undefined,
-              buildDir,
-              outDir: packageDir,
-              bundleId: config.package?.bundleId,
-              category: config.package?.mac?.category || config.package?.category,
-            },
-            targets,
-            results
-          );
-          }
+         case 'darwin':
+           {
+           const targets = resolveTargets('darwin', config.package?.mac?.target || ['app', 'dmg']);
+           if (targets.length === 0) break;
+            await buildForDarwin(
+              {
+                name: appName,
+                version: appVersion,
+                description: appDescription,
+                author: appAuthor,
+                icon: appIcon || undefined,
+                buildDir,
+                outDir: packageDir,
+                bundleId: config.package?.bundleId,
+                category: config.package?.mac?.category || config.package?.category,
+                sign: options.sign,
+                signOptions: options.sign ? {
+                  identity: config.package?.mac?.identity,
+                } : undefined,
+                webviewEngine,
+              },
+             targets,
+             results
+           );
+           }
           break;
 
         case 'linux':
@@ -169,41 +181,49 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
           const targets = resolveTargets('linux', config.package?.linux?.target || ['appimage']);
           if (targets.length === 0) break;
           await buildForLinux(
-            {
-              name: appName,
-              version: appVersion,
-              description: appDescription,
-              author: appAuthor,
-              icon: appIcon || undefined,
-              buildDir,
-              outDir: packageDir,
-              category: config.package?.linux?.category,
-              maintainer: config.package?.linux?.maintainer,
-            },
+             {
+               name: appName,
+               version: appVersion,
+               description: appDescription,
+               author: appAuthor,
+               icon: appIcon || undefined,
+               buildDir,
+               outDir: packageDir,
+               category: config.package?.linux?.category,
+               maintainer: config.package?.linux?.maintainer,
+               webviewEngine,
+             },
             targets,
             results
           );
           }
           break;
 
-        case 'win32':
-          {
-          const targets = resolveTargets('win32', config.package?.win?.target || ['folder']);
-          if (targets.length === 0) break;
-          await buildForWin32(
-            {
-              name: appName,
-              version: appVersion,
-              description: appDescription,
-              author: appAuthor,
-              icon: appIcon || undefined,
-              buildDir,
-              outDir: packageDir,
-            },
-            targets,
-            results
-          );
-          }
+         case 'win32':
+           {
+           const targets = resolveTargets('win32', config.package?.win?.target || ['folder']);
+           if (targets.length === 0) break;
+            await buildForWin32(
+              {
+                name: appName,
+                version: appVersion,
+                description: appDescription,
+                author: appAuthor,
+                icon: appIcon || undefined,
+                buildDir,
+                outDir: packageDir,
+                sign: options.sign,
+                signOptions: options.sign ? {
+                  certificateFile: process.env.WIN_CERTIFICATE_FILE,
+                  certificatePassword: process.env.WIN_CERTIFICATE_PASSWORD,
+                  timestampServer: process.env.WIN_TIMESTAMP_SERVER,
+                } : undefined,
+                webviewEngine,
+              },
+             targets,
+             results
+           );
+           }
           break;
 
         default:
@@ -225,6 +245,36 @@ export async function packageCommand(options: PackageOptions): Promise<void> {
     })),
   });
   writeReleaseArtifactManifest(packageDir, releaseArtifactManifest);
+
+  // Generate blockmaps for update manifests
+  console.log('  Generating blockmaps...');
+  for (const result of results) {
+    if (result.kind === 'file' && shouldGenerateBlockMap(result.name)) {
+      try {
+        const blockMapResult = await generateBlockMapFile(result.path);
+        if (blockMapResult) {
+          console.log(`    ✓ ${path.basename(blockMapResult.path)}`);
+        }
+      } catch (e) {
+        console.warn(`    ⚠ Blockmap failed for ${result.name}: ${e}`);
+      }
+    }
+  }
+
+  // Generate update manifests
+  console.log('  Generating update manifests...');
+  try {
+    const manifestPaths = await generateUpdateManifestsForRelease(
+      packageDir,
+      appName,
+      appVersion
+    );
+    for (const manifestPath of manifestPaths) {
+      console.log(`    ✓ ${path.basename(manifestPath)}`);
+    }
+  } catch (e) {
+    console.warn(`  ⚠ Update manifest generation skipped: ${e}`);
+  }
 
   console.log(`\n  ✓ Packaging completed in ${duration}s\n`);
   console.log('  Output files:');
@@ -384,4 +434,9 @@ function formatSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function shouldGenerateBlockMap(filename: string): boolean {
+  const ext = path.extname(filename).toLowerCase();
+  return ['.dmg', '.exe', '.appimage', '.zip'].includes(ext);
 }

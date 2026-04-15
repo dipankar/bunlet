@@ -4,9 +4,12 @@
  * These let BrowserWindow and WebContents evolve independently even while
  * native-originated event sync is still being built out.
  */
+import type { Rectangle } from '../types';
+
 export class BrowserWindowState {
   private title: string;
   private destroyed = false;
+  private bounds: Rectangle | undefined;
 
   constructor(initialTitle: string) {
     this.title = initialTitle;
@@ -26,6 +29,14 @@ export class BrowserWindowState {
 
   markDestroyed(): void {
     this.destroyed = true;
+  }
+
+  getBounds(): Rectangle | undefined {
+    return this.bounds;
+  }
+
+  updateBounds(bounds: Rectangle): void {
+    this.bounds = bounds;
   }
 }
 

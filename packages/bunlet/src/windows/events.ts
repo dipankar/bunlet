@@ -26,6 +26,7 @@ export interface NativeWindowEventTarget {
   isDestroyed(): boolean;
   requestClose(): void;
   markClosed(): void;
+  updateBounds(bounds: Rectangle): void;
 }
 
 export function applyNativeWindowEvent(
@@ -40,10 +41,20 @@ export function applyNativeWindowEvent(
       target.emit('blur');
       break;
     case 'window-resize':
-      target.emit('resize');
+      if (event.bounds) {
+        target.updateBounds(event.bounds);
+        target.emit('resize', event.bounds);
+      } else {
+        target.emit('resize');
+      }
       break;
     case 'window-move':
-      target.emit('move');
+      if (event.bounds) {
+        target.updateBounds(event.bounds);
+        target.emit('move', event.bounds);
+      } else {
+        target.emit('move');
+      }
       break;
     case 'window-title-updated':
       if (typeof event.title === 'string') {
@@ -85,6 +96,24 @@ export function applyNativeWindowEvent(
       if (!target.isDestroyed()) {
         target.markClosed();
       }
+      break;
+    case 'window-maximized':
+      target.emit('maximize');
+      break;
+    case 'window-unmaximized':
+      target.emit('unmaximize');
+      break;
+    case 'window-minimized':
+      target.emit('minimize');
+      break;
+    case 'window-restored':
+      target.emit('restore');
+      break;
+    case 'window-entered-fullscreen':
+      target.emit('enter-full-screen');
+      break;
+    case 'window-left-fullscreen':
+      target.emit('leave-full-screen');
       break;
     case 'window-scale-factor-changed':
       if (typeof event.scaleFactor === 'number') {

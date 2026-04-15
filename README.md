@@ -31,21 +31,20 @@ Bunlet is a modern desktop application framework that combines the speed of [Bun
 ## Quick Start
 
 ```bash
-# Clone the repository
+# Clone and set up everything in one command
 git clone https://github.com/bunlet/bunlet.git
 cd bunlet
+bun run setup
 
-# Install dependencies
-bun install
-
-# Build all packages
-cd packages/bunlet-native && cargo build && cd ../..
-cd packages/bunlet && bun run build && cd ../..
+# Verify your environment
+bun run doctor
 
 # Run an example
 cd examples/hello-world
 bun run main.ts
 ```
+
+The `bun run setup` command installs dependencies, builds the Rust native module, and builds the TypeScript packages. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions.
 
 ## Example Application
 
@@ -55,7 +54,7 @@ import { app, BrowserWindow, z } from 'bunlet';
 import path from 'path';
 
 // Register IPC handlers before app is ready
-app.handle('greet', z.object({ name: z.string() }), async (_, params) => {
+app.handle('greet', z.object({ name: z.string() }), async (params) => {
   return { message: `Hello, ${params.name}!` };
 });
 
@@ -261,21 +260,20 @@ bunlet/
 
 ## Requirements
 
-- **Bun** 1.0 or later
-- **Rust** (for building bunlet-native)
-- **Operating Systems**:
-  - Windows 10/11 (x64) - WebView2 runtime
-  - macOS 10.15+ (x64, ARM64)
-  - Linux (x64) - WebKitGTK 4.1
+- **Bun** 1.0 or later ([install](https://bun.sh))
+- **Rust** stable >= 1.70 ([install via rustup](https://rustup.rs))
+- **macOS**: Xcode Command Line Tools (`xcode-select --install`)
+- **Windows 10/11** (x64): [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+- **Linux**: WebKitGTK 4.1 (see below)
 
 ### Linux Dependencies
 
 ```bash
 # Ubuntu/Debian
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libx11-dev librsvg2-dev
 
 # Fedora
-sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel
+sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel libX11-devel librsvg2-devel
 
 # Arch
 sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3
@@ -284,21 +282,26 @@ sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3
 ## Development
 
 ```bash
-# Build native bindings
-cd packages/bunlet-native
-cargo build
+# Full setup (install + build native + build TS)
+bun run setup
 
-# Build TypeScript package
-cd packages/bunlet
-bun run build
+# Verify environment
+bun run doctor
+
+# Build individual pieces
+bun run build:native      # Rust native module only
+bun run build:packages    # TypeScript packages only
 
 # Run tests
 bun test
+
+# Run the CLI from source
+bun run dev -- <command>   # e.g. bun run dev -- create my-app
 ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, development workflow, and code style guidelines.
 
 Repository docs live in [docs/index.md](docs/index.md). The `documentation/` tree is deprecated.
 

@@ -17,21 +17,33 @@ import {
 import {
   createBuildArtifactManifest,
   writeBuildArtifactManifest,
+  type BuildArtifactPaths,
 } from '../artifacts/build-manifest';
 import { loadBunletConfig } from '../config';
+
+export type SourceMapOption = boolean | 'inline' | 'external';
 
 export interface BuildOptions {
   target: string;
   outdir: string;
   minify: boolean;
-  sourcemap: boolean;
+  sourcemap: SourceMapOption;
   webview?: string;
+}
+
+export function parseSourcemapOption(value: string | boolean | undefined): SourceMapOption {
+  if (value === undefined || value === false) return false;
+  if (value === true) return 'external';
+  if (value === 'inline') return 'inline';
+  if (value === 'external') return 'external';
+  return 'external';
 }
 
 /**
  * Build the application
  */
 export async function buildCommand(options: BuildOptions): Promise<void> {
+  const sourcemap = parseSourcemapOption(options.sourcemap);
   const root = process.cwd();
   const config = await loadBunletConfig(root);
   const webviewEngine = options.webview || config.webview?.engine || 'system';
@@ -50,6 +62,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   console.log(`  Renderer: ${rendererDir}`);
   console.log(`  WebView: ${webviewEngine}`);
   console.log(`  Minify: ${options.minify}`);
+  console.log(`  Source maps: ${sourcemap === false ? 'disabled' : sourcemap}`);
   console.log(`  Target: ${options.target}\n`);
 
   // Clean output directory
@@ -60,12 +73,13 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
   const errors: string[] = [];
   const startTime = Date.now();
+  const sourcemapFiles: string[] = [];
 
   // 1. Bundle main process
   console.log('  [1/6] Bundling main process...');
   const mainResult = await bundleMain(root, mainEntry, outDir, {
     minify: options.minify,
-    sourcemap: options.sourcemap,
+    sourcemap,
   });
 
   if (!mainResult.success) {
@@ -73,13 +87,14 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     mainResult.errors.forEach((e) => console.error(`    ${e}`));
     process.exit(1);
   }
+  collectSourcemapFiles(outDir, mainResult.outputs, sourcemapFiles);
   console.log('  ✓ Main process bundled');
 
   // 2. Bundle preload (if exists)
   console.log('  [2/6] Bundling preload script...');
   const preloadResult = await bundlePreload(root, outDir, {
     minify: options.minify,
-    sourcemap: options.sourcemap,
+    sourcemap,
   });
 
   if (preloadResult === null) {
@@ -89,6 +104,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     preloadResult.errors.forEach((e) => console.error(`    ${e}`));
     errors.push(...preloadResult.errors);
   } else {
+    collectSourcemapFiles(outDir, preloadResult.outputs, sourcemapFiles);
     console.log('  ✓ Preload script bundled');
   }
 
@@ -138,6 +154,29 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   console.log('  ✓ Package.json generated');
 
   console.log('  [6/6] Writing build artifact manifest...');
+  
+  // Collect CEF runtime asset details
+  let cefRuntimeAssets: BuildArtifactPaths['cefRuntimeAssets'] | undefined;
+  if (webviewEngine === 'cef') {
+    const cefModuleDir = path.join(outDir, 'node_modules', '@bunlet', 'cef');
+    cefRuntimeAssets = {};
+    if (fs.existsSync(path.join(cefModuleDir, 'bunlet-cef-helper'))) {
+      cefRuntimeAssets.helperBinary = path.join('node_modules', '@bunlet', 'cef', 'bunlet-cef-helper');
+    }
+    if (fs.existsSync(path.join(cefModuleDir, 'bunlet-cef-helper.exe'))) {
+      cefRuntimeAssets.helperBinary = path.join('node_modules', '@bunlet', 'cef', 'bunlet-cef-helper.exe');
+    }
+    if (fs.existsSync(path.join(cefModuleDir, 'cef-binaries'))) {
+      cefRuntimeAssets.cefBinariesDir = path.join('node_modules', '@bunlet', 'cef', 'cef-binaries');
+    }
+    const cefNodePattern = /bunlet-cef\..+\.node$/;
+    const cefNodeFile = fs.readdirSync(cefModuleDir, { withFileTypes: true })
+      .find((f) => f.isFile() && cefNodePattern.test(f.name));
+    if (cefNodeFile) {
+      cefRuntimeAssets.nodeBinary = path.join('node_modules', '@bunlet', 'cef', cefNodeFile.name);
+    }
+  }
+
   const buildArtifactManifest = createBuildArtifactManifest({
     name: appName,
     version: appVersion,
@@ -152,7 +191,9 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         webviewEngine === 'cef' && fs.existsSync(path.join(outDir, 'node_modules', '@bunlet', 'cef'))
           ? path.join('node_modules', '@bunlet', 'cef')
           : undefined,
+      cefRuntimeAssets: cefRuntimeAssets && Object.keys(cefRuntimeAssets).length > 0 ? cefRuntimeAssets : undefined,
     },
+    sourcemaps: sourcemapFiles.length > 0 ? sourcemapFiles : undefined,
   });
   writeBuildArtifactManifest(outDir, buildArtifactManifest);
   console.log('  ✓ Build artifact manifest written');
@@ -208,4 +249,13 @@ function formatSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function collectSourcemapFiles(outDir: string, outputs: string[], collector: string[]): void {
+  for (const outputPath of outputs) {
+    const mapPath = outputPath + '.map';
+    if (fs.existsSync(mapPath)) {
+      collector.push(path.relative(outDir, mapPath));
+    }
+  }
 }

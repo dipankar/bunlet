@@ -1,7 +1,3 @@
-/**
- * Update Providers
- */
-
 export { BaseProvider } from './base';
 export type { UpdateProvider, ProgressCallback } from './base';
 export { GitHubProvider } from './github';

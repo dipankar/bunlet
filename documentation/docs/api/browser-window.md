@@ -56,6 +56,48 @@ interface BrowserWindowOptions {
 }
 ```
 
+### WebPreferences
+
+```typescript
+interface WebPreferences {
+  preload?: string;            // Path to preload script
+  partition?: string;          // Session partition name
+  session?: Session;           // Explicit session object
+  devTools?: boolean;          // Enable DevTools (default: true)
+  contextIsolation?: boolean;  // Enable context isolation (default: true)
+  sandbox?: boolean;           // Enable sandbox (default: true)
+  webSecurity?: boolean;       // Enable web security (default: true)
+}
+```
+
+#### preload
+
+Path to a script that runs in the renderer before the page loads. TypeScript
+files (`.ts`) are automatically transpiled.
+
+```typescript
+const win = new BrowserWindow({
+  webPreferences: {
+    preload: path.join(import.meta.dir, 'preload.ts'),
+  },
+});
+```
+
+See [Preload Scripts](../guides/preload.md) for the full guide.
+
+#### partition / session
+
+Isolate browser state (cookies, localStorage, cache) per window.
+
+```typescript
+// Named partition (persistent)
+const win = new BrowserWindow({
+  webPreferences: {
+    partition: 'persist:user1',
+  },
+});
+```
+
 ## Instance Properties
 
 ### `id`
@@ -388,11 +430,21 @@ win.destroy();
 
 #### `send(channel, ...args)`
 
-Send message to renderer.
+Send message to the renderer. Shorthand for `win.webContents.send()`.
 
 ```typescript
 win.send('notification', { message: 'Hello' });
 ```
+
+The renderer listens with:
+
+```javascript
+window.__bunlet.on('notification', (event, data) => {
+  console.log(data.message); // "Hello"
+});
+```
+
+See [WebContents.send()](web-contents.md#sendchannel-args) for details.
 
 ## Static Methods
 

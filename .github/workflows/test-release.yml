@@ -7,9 +7,10 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   hello:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Hello from test workflow with permissions"
+      - run: echo "Hello from test workflow with id-token"

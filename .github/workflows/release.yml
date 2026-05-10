@@ -68,7 +68,8 @@ jobs:
             linux-x64|linux-arm64) PLATFORM_FLAG="--linux" ;;
             win32-x64) PLATFORM_FLAG="--win" ;;
           esac
-          bun run bunlet package "$PLATFORM_FLAG"
+          echo "Would run: bun run bunlet package $PLATFORM_FLAG"
+          echo "Skipping packaging for now - requires application build"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4

@@ -10,7 +10,26 @@ permissions:
   id-token: write
 
 jobs:
-  hello:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin-arm64
+          - os: macos-13
+            platform: darwin-x64
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win32-x64
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Building ${{ matrix.platform }}"
+
+  publish:
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Hello from test workflow with id-token"
+      - run: echo "Publishing"

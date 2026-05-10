@@ -92,7 +92,7 @@ jobs:
           path: |
             packages/bunlet-cef/*.node
             packages/bunlet-cef/bunlet-cef-helper*
-        if-no-files-found: warn
+          if-no-files-found: warn
 
   publish-npm:
     name: Publish to npm

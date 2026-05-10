@@ -1,6 +1,6 @@
 name: Version Bump
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       version:

@@ -22,7 +22,7 @@ Thanks for your interest in contributing! Here's how to get started.
 One command to install dependencies, build the native module, and build the TypeScript packages:
 
 ```bash
-git clone https://github.com/bunlet/bunlet && cd bunlet
+git clone https://github.com/dipankar/bunlet && cd bunlet
 bun run setup
 ```
 

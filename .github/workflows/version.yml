@@ -1,0 +1,67 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to bump to (e.g., 0.2.0, patch, minor, major)'
+        required: true
+        default: 'patch'
+      dry_run:
+        description: 'Dry run (do not push changes)'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: bun run scripts/bump-version.ts ${{ github.event.inputs.version }}
+
+      - name: Generate changelog
+        run: bun run scripts/generate-changelog.ts
+
+      - name: Show changes (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "### Version bump diff"
+          git diff
+          echo ""
+          echo "### CHANGELOG.md preview (last 40 lines)"
+          tail -n 40 CHANGELOG.md
+
+      - name: Commit version bump
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git add -A
+          git commit -m "ci: release v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin main
+          git push origin "v${VERSION}"
+
+      - name: Create release PR (dry run path)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run complete. No changes were pushed."
+          echo "Set dry_run=false to commit, tag, and push."

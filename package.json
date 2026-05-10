@@ -16,7 +16,9 @@
     "dev": "bun run ./packages/bunlet-cli/src/cli.ts",
     "test": "bun test packages/",
     "doctor": "bun run scripts/doctor.ts",
-    "clean": "rm -rf packages/*/dist packages/*/*.node examples/*/*.bunlet-preload.js"
+    "clean": "rm -rf packages/*/dist packages/*/*.node examples/*/*.bunlet-preload.js",
+    "version:bump": "bun run scripts/bump-version.ts",
+    "version:changelog": "bun run scripts/generate-changelog.ts"
   },
   "devDependencies": {
     "@bunlet/cli": "workspace:*",

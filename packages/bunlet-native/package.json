@@ -7,12 +7,25 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bunlet/bunlet"
+    "url": "git+https://github.com/dipankar/bunlet.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "files": [
     "index.js",
     "index.d.ts",
+    "README.md",
     "*.node"
+  ],
+  "keywords": [
+    "bunlet",
+    "native",
+    "webview",
+    "desktop",
+    "rust",
+    "napi"
   ],
   "napi": {
     "name": "bunlet-native",

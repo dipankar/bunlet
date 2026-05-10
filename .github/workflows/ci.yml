@@ -76,37 +76,61 @@ jobs:
         include:
           - os: macos-latest
             platform: darwin-arm64
+            rust-target: aarch64-apple-darwin
+          - os: macos-13
+            platform: darwin-x64
+            rust-target: x86_64-apple-darwin
           - os: ubuntu-latest
             platform: linux-x64
+            rust-target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            platform: linux-arm64
+            rust-target: aarch64-unknown-linux-gnu
           - os: windows-latest
             platform: win32-x64
+            rust-target: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             packages/bunlet-native -> target
+            packages/bunlet-cef-native -> target
 
       - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: bun install
 
-      - name: Build native addon
+      - name: Build bunlet-native
         run: cd packages/bunlet-native && bun run build
 
-      - name: Upload native addon
+      - name: Build bunlet-cef-native
+        run: cd packages/bunlet-cef && bun run build
+        continue-on-error: true
+
+      - name: Upload bunlet-native artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bunlet-native-${{ matrix.platform }}
+          path: packages/bunlet-native/*.node
+
+      - name: Upload bunlet-cef artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunlet-cef-${{ matrix.platform }}
           path: |
-            packages/bunlet-native/*.node
+            packages/bunlet-cef/*.node
+            packages/bunlet-cef/bunlet-cef-helper*
+        if: ${{ !cancelled() }}
 
   binary-size:
     name: Binary size report
@@ -121,10 +145,22 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Download native addon
+      - name: Download darwin-arm64 native addon
         uses: actions/download-artifact@v4
         with:
           name: bunlet-native-darwin-arm64
+          path: packages/bunlet-native
+
+      - name: Download darwin-x64 native addon
+        uses: actions/download-artifact@v4
+        with:
+          name: bunlet-native-darwin-x64
+          path: packages/bunlet-native
+
+      - name: Download linux-x64 native addon
+        uses: actions/download-artifact@v4
+        with:
+          name: bunlet-native-linux-x64
           path: packages/bunlet-native
 
       - name: Measure binary sizes
@@ -132,21 +168,45 @@ jobs:
           echo "## Binary Size Report" >> $GITHUB_STEP_SUMMARY
           echo "| Asset | Size |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
-          
-          # Native addon
-          NATIVE_SIZE=$(stat -f%z packages/bunlet-native/*.node 2>/dev/null || echo "0")
-          echo "| bunlet-native (macOS ARM64) | $(numfmt --to=iec $NATIVE_SIZE 2>/dev/null || echo "${NATIVE_SIZE} bytes") |" >> $GITHUB_STEP_SUMMARY
-          
+
+          # macOS ARM64 native addon
+          NATIVE_SIZE_DARWIN_ARM64=$(stat -f%z packages/bunlet-native/bunlet-native.darwin-arm64.node 2>/dev/null || echo "0")
+          echo "| bunlet-native (macOS ARM64) | $(numfmt --to=iec $NATIVE_SIZE_DARWIN_ARM64 2>/dev/null || echo "${NATIVE_SIZE_DARWIN_ARM64} bytes") |" >> $GITHUB_STEP_SUMMARY
+
+          # macOS x64 native addon
+          NATIVE_SIZE_DARWIN_X64=$(stat -f%z packages/bunlet-native/bunlet-native.darwin-x64.node 2>/dev/null || echo "0")
+          echo "| bunlet-native (macOS x64) | $(numfmt --to=iec $NATIVE_SIZE_DARWIN_X64 2>/dev/null || echo "${NATIVE_SIZE_DARWIN_X64} bytes") |" >> $GITHUB_STEP_SUMMARY
+
+          # Linux x64 native addon
+          NATIVE_SIZE_LINUX_X64=$(stat -c%s packages/bunlet-native/bunlet-native.linux-x64-gnu.node 2>/dev/null || echo "0")
+          echo "| bunlet-native (Linux x64) | $(numfmt --to=iec $NATIVE_SIZE_LINUX_X64 2>/dev/null || echo "${NATIVE_SIZE_LINUX_X64} bytes") |" >> $GITHUB_STEP_SUMMARY
+
           # Core runtime bundle
           cd packages/bunlet
           BUILD_SIZE=$(wc -c < dist/index.js 2>/dev/null || echo "0")
           echo "| bunlet runtime | $(numfmt --to=iec $BUILD_SIZE 2>/dev/null || echo "${BUILD_SIZE} bytes") |" >> $GITHUB_STEP_SUMMARY
 
       - name: Check size budgets
+        shell: bash
         run: |
-          # Budget: native addon should be under 5MB on macOS ARM64
-          NATIVE_SIZE=$(stat -f%z packages/bunlet-native/*.node 2>/dev/null || echo "0")
           BUDGET=$((5 * 1024 * 1024))
-          if [ "$NATIVE_SIZE" -gt "$BUDGET" ]; then
-            echo "::warning::Native addon exceeds 5MB budget (${NATIVE_SIZE} bytes)"
-          fi
+
+          check_size() {
+            local file="$1"
+            local label="$2"
+            if [ -f "$file" ]; then
+              local size
+              if [[ "$OSTYPE" == "darwin"* ]]; then
+                size=$(stat -f%z "$file")
+              else
+                size=$(stat -c%s "$file")
+              fi
+              if [ "$size" -gt "$BUDGET" ]; then
+                echo "::warning::$label exceeds 5MB budget (${size} bytes)"
+              fi
+            fi
+          }
+
+          check_size packages/bunlet-native/bunlet-native.darwin-arm64.node "Native addon (macOS ARM64)"
+          check_size packages/bunlet-native/bunlet-native.darwin-x64.node "Native addon (macOS x64)"
+          check_size packages/bunlet-native/bunlet-native.linux-x64-gnu.node "Native addon (Linux x64)"

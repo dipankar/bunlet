@@ -41,5 +41,13 @@
     "desktop",
     "electron-alternative"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dipankar/bunlet.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "MIT"
 }

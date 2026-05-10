@@ -6,6 +6,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0-orange.svg)](https://bun.sh/)
+[![npm](https://img.shields.io/npm/v/bunlet)](https://www.npmjs.com/package/bunlet)
+[![crates.io](https://img.shields.io/crates/v/bunlet-native)](https://crates.io/crates/bunlet-native)
+[![GitHub Release](https://img.shields.io/github/v/release/bunlet/bunlet)](https://github.com/dipankar/bunlet/releases)
 
 Bunlet is a modern desktop application framework that combines the speed of [Bun](https://bun.sh) with native WebView rendering. Create cross-platform desktop apps with TypeScript while keeping installers small and memory usage low.
 
@@ -30,9 +33,19 @@ Bunlet is a modern desktop application framework that combines the speed of [Bun
 
 ## Quick Start
 
+### Using the CLI (Recommended)
+
+```bash
+bunx @bunlet/cli create my-app
+cd my-app
+bun run dev
+```
+
+### From Source
+
 ```bash
 # Clone and set up everything in one command
-git clone https://github.com/bunlet/bunlet.git
+git clone https://github.com/dipankar/bunlet.git
 cd bunlet
 bun run setup
 

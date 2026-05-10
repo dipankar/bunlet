@@ -7,7 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bunlet/bunlet"
+    "url": "git+https://github.com/dipankar/bunlet.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release && bun run copy-artifact",
@@ -30,7 +34,17 @@
   "files": [
     "index.js",
     "index.d.ts",
+    "README.md",
     "scripts",
-    "*.node"
+    "*.node",
+    "bunlet-cef-helper",
+    "bunlet-cef-helper.exe"
+  ],
+  "keywords": [
+    "bunlet",
+    "cef",
+    "chromium",
+    "webview",
+    "desktop"
   ]
 }

@@ -5,8 +5,11 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   hello:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Hello from test workflow"
+      - run: echo "Hello from test workflow with permissions"

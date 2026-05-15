@@ -17,9 +17,9 @@ import {
   parseConfig,
   type BunletConfig,
   type ConfigParseResult,
-} from 'bunlet/config';
+} from '@bunlet/core/config';
 
-export type { BunletConfig, ConfigParseResult } from 'bunlet/config';
+export type { BunletConfig, ConfigParseResult } from '@bunlet/core/config';
 
 export interface ProjectPackageJson {
   name?: string;

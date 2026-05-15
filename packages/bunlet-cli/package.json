@@ -1,7 +1,7 @@
 {
   "name": "@bunlet/cli",
   "version": "0.3.0",
-  "description": "CLI for Bunlet desktop framework",
+  "description": "Official CLI for the Bunlet desktop framework — scaffold, develop, build, and package cross-platform desktop apps",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,7 +29,7 @@
     "typescript": "^5.3.0"
   },
   "peerDependencies": {
-    "bunlet": "workspace:*"
+    "@bunlet/core": "workspace:*"
   },
   "files": [
     "bin",
@@ -39,16 +39,26 @@
   "keywords": [
     "bunlet",
     "cli",
+    "bun",
     "desktop",
-    "electron-alternative"
+    "electron-alternative",
+    "scaffold",
+    "build-tool",
+    "packaging",
+    "cross-platform",
+    "create-app",
+    "dev-server",
+    "installer",
+    "typescript",
+    "hot-reload"
   ],
+  "homepage": "https://bunlet.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dipankar/bunlet.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "license": "MIT"
 }

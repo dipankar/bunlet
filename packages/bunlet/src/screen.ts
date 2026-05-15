@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { screen } from 'bunlet';
+ * import { screen } from '@bunlet/core';
  *
  * // Get primary display
  * const primary = screen.getPrimaryDisplay();

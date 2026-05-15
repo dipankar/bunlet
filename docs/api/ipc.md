@@ -34,7 +34,7 @@ Bunlet uses IPC to communicate between the main process and renderer.
 Registers an IPC handler.
 
 ```typescript
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 import { z } from 'zod';
 
 app.handle(
@@ -62,7 +62,7 @@ interface IPCContext {
 ### Examples
 
 ```typescript
-import { app, dialog } from 'bunlet';
+import { app, dialog } from '@bunlet/core';
 import { z } from 'zod';
 
 // Simple handler
@@ -131,7 +131,7 @@ Exposes APIs to the renderer's `window` object.
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Invoke main process handlers
@@ -382,7 +382,7 @@ app.handle('close-window',
 ### main.ts
 
 ```typescript
-import { app, BrowserWindow, dialog } from 'bunlet';
+import { app, BrowserWindow, dialog } from '@bunlet/core';
 import { z } from 'zod';
 
 app.handle('fs:read',
@@ -421,7 +421,7 @@ app.whenReady().then(() => {
 ### preload.ts
 
 ```typescript
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   readFile: (path: string) =>

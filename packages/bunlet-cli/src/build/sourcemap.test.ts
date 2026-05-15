@@ -77,7 +77,7 @@ describe('composeSourceMaps', () => {
 
 describe('sourcemap end-to-end', () => {
   test('HMR transform produces valid source map with polyfill shift', () => {
-    const source = 'import { app } from "bunlet";\nconsole.log("hello");\n';
+    const source = 'import { app } from "@bunlet/core";\nconsole.log("hello");\n';
     const moduleId = '/src/app.ts';
     const polyfill = 'const __bunlet_hmr = {};\n// line 2 of polyfill\n';
     const polyfillLineCount = polyfill.split('\n').length - 1;

@@ -3,7 +3,7 @@
 Create system tray icons with context menus.
 
 ```typescript
-import { Tray } from 'bunlet';
+import { Tray } from '@bunlet/core';
 ```
 
 ## Constructor
@@ -140,7 +140,7 @@ tray.on('double-click', (event) => {
 ## Example
 
 ```typescript
-import { app, Tray, Menu, BrowserWindow } from 'bunlet';
+import { app, Tray, Menu, BrowserWindow } from '@bunlet/core';
 
 let tray: Tray | null = null;
 

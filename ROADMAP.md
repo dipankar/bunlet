@@ -465,7 +465,7 @@ Bunlet supports multiple windows with independent webviews and window-specific I
 
 ```typescript
 // Multi-window example
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;

@@ -7,7 +7,7 @@
  * @example
  * ```typescript
  * // In preload.ts
- * import { contextBridge, ipcRenderer } from 'bunlet';
+ * import { contextBridge, ipcRenderer } from '@bunlet/core';
  *
  * contextBridge.exposeInMainWorld('api', {
  *   doThing: () => ipcRenderer.invoke('do-thing'),

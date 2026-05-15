@@ -83,8 +83,8 @@ export async function createCommand(
 
   // Create main process file
   const mainContent = options.typescript
-    ? `import { app, BrowserWindow } from 'bunlet';
-import { z } from 'bunlet';
+    ? `import { app, BrowserWindow } from '@bunlet/core';
+import { z } from '@bunlet/core';
 import * as path from 'path';
 
 // Register handlers/events before app startup
@@ -118,7 +118,7 @@ if (process.env.NODE_ENV === 'development') {
 
 app.run();
 `
-    : `import { app, BrowserWindow, z } from 'bunlet';
+    : `import { app, BrowserWindow, z } from '@bunlet/core';
 import * as path from 'path';
 
 app.handle('greet', z.object({ name: z.string() }), async ({ name }) => {

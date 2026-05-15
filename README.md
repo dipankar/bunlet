@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0-orange.svg)](https://bun.sh/)
-[![npm](https://img.shields.io/npm/v/bunlet)](https://www.npmjs.com/package/bunlet)
+[![npm](https://img.shields.io/npm/v/@bunlet/core)](https://www.npmjs.com/package/@bunlet/core)
 [![crates.io](https://img.shields.io/crates/v/bunlet-native)](https://crates.io/crates/bunlet-native)
 [![GitHub Release](https://img.shields.io/github/v/release/bunlet/bunlet)](https://github.com/dipankar/bunlet/releases)
 
@@ -63,7 +63,7 @@ The `bun run setup` command installs dependencies, builds the Rust native module
 
 ```typescript
 // main.ts
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 // Register IPC handlers before app is ready

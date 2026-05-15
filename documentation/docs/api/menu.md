@@ -3,7 +3,7 @@
 Create application and context menus.
 
 ```typescript
-import { Menu, MenuItem } from 'bunlet';
+import { Menu, MenuItem } from '@bunlet/core';
 ```
 
 ## Menu Class

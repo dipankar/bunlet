@@ -2,12 +2,12 @@
 name = "bunlet-native"
 version = "0.1.0"
 edition = "2021"
-description = "Native bindings for Bunlet desktop framework"
+description = "Cross-platform desktop app native bindings using system WebViews and NAPI-RS — powers the Bunlet desktop framework"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/dipankar/bunlet"
 homepage = "https://bunlet.dev"
-keywords = ["webview", "desktop", "gui", "bun", "electron-alternative"]
+keywords = ["webview", "desktop", "gui", "bun", "napi-rs"]
 categories = ["gui", "web-programming"]
 authors = ["Bunlet Contributors"]
 

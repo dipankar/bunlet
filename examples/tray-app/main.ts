@@ -17,7 +17,7 @@ import {
   MenuItem,
   Notification,
   globalShortcut,
-} from 'bunlet';
+} from '@bunlet/core';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null = null;

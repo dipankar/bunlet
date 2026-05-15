@@ -32,7 +32,7 @@ my-app/
 ### Main Process (`main.ts`)
 
 ```typescript
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 // Register an IPC handler

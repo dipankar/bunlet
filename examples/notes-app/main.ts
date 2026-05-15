@@ -2,7 +2,7 @@
  * Notes App - Main Process Entry Point
  */
 
-import { app, BrowserWindow, Menu, z } from 'bunlet';
+import { app, BrowserWindow, Menu, z } from '@bunlet/core';
 import * as path from 'path';
 
 app.setName('Notes App');

@@ -8,7 +8,7 @@ This guide covers patterns and best practices for communication between main and
 
 ```typescript
 // main.ts
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 import { z } from 'zod';
 
 app.handle('greet',
@@ -23,7 +23,7 @@ app.handle('greet',
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   greet: (name: string) => ipcRenderer.invoke('greet', { name }),
@@ -135,7 +135,7 @@ app.handle('system:info',
 
 ```typescript
 // main.ts
-import { dialog } from 'bunlet';
+import { dialog } from '@bunlet/core';
 
 app.handle('dialog:open',
   z.object({
@@ -198,7 +198,7 @@ app.handle('dialog:message',
 
 ```typescript
 // main.ts
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 
 function notifyRenderer(data: any) {
   const windows = BrowserWindow.getAllWindows();

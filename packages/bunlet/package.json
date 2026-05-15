@@ -1,7 +1,7 @@
 {
-  "name": "bunlet",
+  "name": "@bunlet/core",
   "version": "0.1.0",
-  "description": "Build cross-platform desktop apps with Bun and WebView",
+  "description": "Build cross-platform desktop apps with Bun and WebView — a lightweight, familiar alternative to Electron",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -50,19 +50,29 @@
   "keywords": [
     "bun",
     "desktop",
+    "desktop-app",
+    "desktop-framework",
     "electron",
+    "electron-alternative",
     "tauri",
     "webview",
     "gui",
-    "cross-platform"
+    "cross-platform",
+    "macos",
+    "windows",
+    "linux",
+    "typescript",
+    "native-webview",
+    "zod",
+    "ipc"
   ],
   "license": "MIT",
+  "homepage": "https://bunlet.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dipankar/bunlet.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }

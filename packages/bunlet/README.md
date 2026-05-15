@@ -1,8 +1,8 @@
-# bunlet
+# @bunlet/core
 
 > Build cross-platform desktop apps with Bun and WebView — a lightweight, familiar alternative to Electron.
 
-[![npm version](https://img.shields.io/npm/v/bunlet)](https://www.npmjs.com/package/bunlet)
+[![npm version](https://img.shields.io/npm/v/@bunlet/core)](https://www.npmjs.com/package/@bunlet/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0-orange.svg)](https://bun.sh/)
@@ -14,12 +14,12 @@ Bunlet combines Bun's speed with native system WebViews. You get an Electron-com
 ## Quick Start
 
 ```bash
-bun add bunlet
+bun add @bunlet/core
 ```
 
 **`main.ts`**
 ```typescript
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 // Register type-safe IPC handlers before the app is ready
@@ -48,7 +48,7 @@ app.run();
 
 **`preload.ts`**
 ```typescript
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   greet: (name: string) => ipcRenderer.invoke('greet', { name }),
@@ -125,7 +125,7 @@ sudo pacman -S webkit2gtk-4.1 gtk3
 ### Application lifecycle
 
 ```typescript
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 
 app.handle('channel', schema, handler);   // register IPC handler
 app.removeHandler('channel');             // remove IPC handler
@@ -148,7 +148,7 @@ app.on('quit', () => {});
 ### BrowserWindow
 
 ```typescript
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 
 const win = new BrowserWindow({
   width: 800,
@@ -238,7 +238,7 @@ app.handle('do-thing', z.object({ id: z.string() }), async (params, ctx) => {
 win.webContents.send('event-name', { data: 123 });
 
 // Preload script
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   doThing: (id: string) => ipcRenderer.invoke('do-thing', { id }),
@@ -253,7 +253,7 @@ window.api.onEvent((event, data) => console.log(data));
 ### Native APIs
 
 ```typescript
-import { dialog, Menu, Tray, Notification, clipboard, shell, globalShortcut, powerMonitor, screen, fileWatcher } from 'bunlet';
+import { dialog, Menu, Tray, Notification, clipboard, shell, globalShortcut, powerMonitor, screen, fileWatcher } from '@bunlet/core';
 
 // File dialogs
 const { filePath, canceled } = await dialog.showOpenDialog({
@@ -315,7 +315,7 @@ watcher.on('change', (event) => console.log(event));
 ### Auto-Updater
 
 ```typescript
-import { autoUpdater } from 'bunlet';
+import { autoUpdater } from '@bunlet/core';
 
 autoUpdater.setFeedURL({
   provider: 'github',
@@ -332,7 +332,7 @@ autoUpdater.checkForUpdates();
 ### Session & Cookies
 
 ```typescript
-import { session } from 'bunlet';
+import { session } from '@bunlet/core';
 
 const sess = session.fromPartition('persist:my-partition');
 const cookies = await sess.cookies.get({ url: 'https://example.com' });
@@ -398,6 +398,153 @@ export default defineConfig({
 - **CEF backend** is optional and requires building the `@bunlet/cef` package. Parity is in progress.
 
 See the [repository docs](https://github.com/dipankar/bunlet) for architecture details and the full roadmap.
+
+---
+
+## FAQ
+
+### How do I pass data between main and renderer?
+
+Use the IPC system. In the main process, register a handler with Zod validation:
+
+```typescript
+// Main process
+app.handle('get-data', z.object({ id: z.string() }), async ({ id }) => {
+  return { name: 'Item ' + id, count: 42 };
+});
+```
+
+In the preload script, expose it via the context bridge:
+
+```typescript
+// Preload
+contextBridge.exposeInMainWorld('api', {
+  getData: (id: string) => ipcRenderer.invoke('get-data', { id }),
+});
+```
+
+In the renderer, call it directly:
+
+```javascript
+const result = await window.api.getData('abc123');
+```
+
+### How do I add a system tray icon?
+
+```typescript
+import { Tray, Menu } from '@bunlet/core';
+
+const tray = new Tray('/path/to/icon.png');
+tray.setToolTip('My App');
+tray.setContextMenu(Menu.buildFromTemplate([
+  { label: 'Show', click: () => win.show() },
+  { label: 'Quit', role: 'quit' },
+]));
+```
+
+### Can I use React, Vue, or Svelte with Bunlet?
+
+Yes — Bunlet renders standard HTML/CSS/JS, so any frontend framework works. Bundle your renderer with Vite, esbuild, or Bun's bundler and load the output. The `bunlet create` command scaffolds a framework-agnostic project; add your framework of choice.
+
+### Why is my window blank on Linux?
+
+You likely don't have the WebKitGTK libraries installed:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev
+```
+
+### How do I update my app automatically?
+
+```typescript
+import { autoUpdater } from '@bunlet/core';
+
+autoUpdater.setFeedURL({
+  provider: 'github',
+  github: { owner: 'user', repo: 'my-app' },
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('New version:', info.version);
+});
+autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall());
+autoUpdater.checkForUpdates();
+```
+
+### Should I use the system WebView or CEF backend?
+
+Use system WebView (default) for most apps — it adds 0MB to your bundle and uses the OS's native browser engine. Use the CEF backend (`@bunlet/cef`) when you need Chromium-specific features: full DevTools, `executeJavaScript` return values, cookie read/write, or pixel-perfect cross-platform rendering. CEF adds approximately 100MB to your app size.
+
+### Can I distribute my app outside app stores?
+
+Yes. The `@bunlet/cli` package command produces standalone installers (.dmg for macOS, .msi/.exe for Windows, .AppImage/.deb for Linux) that users download and install directly — no app store review process.
+
+---
+
+## Migrating from Electron
+
+Bunlet's API is designed to feel familiar to Electron developers. Here are the key differences:
+
+| Pattern | Electron | Bunlet |
+|---|---|---|
+| Install | `npm install electron` | `bun add @bunlet/core` |
+| CLI | `npx create-electron-app` | `bunx @bunlet/cli create` |
+| Import | `import { app } from 'electron'` | `import { app } from '@bunlet/core'` |
+| IPC validation | Manual / none | Zod schema required |
+| Runtime | Node.js | Bun |
+| WebView | Bundled Chromium | System WebView (or optional CEF) |
+| App size | 80–150MB | 20–40MB (120–150MB with CEF) |
+| Start event loop | `app.whenReady()` + implicit | `await app.whenReady(); app.run()` (explicit) |
+
+**Quick code translation — Electron to Bunlet:**
+
+```typescript
+// Electron
+import { app, BrowserWindow } from 'electron';
+
+app.whenReady().then(() => {
+  const win = new BrowserWindow({ width: 800, height: 600 });
+  win.loadFile('index.html');
+});
+
+// Bunlet
+import { app, BrowserWindow } from '@bunlet/core';
+
+await app.whenReady();
+const win = new BrowserWindow({ width: 800, height: 600 });
+win.loadFile('index.html');
+app.run();
+```
+
+Key differences:
+- IPC handlers require Zod schemas in Bunlet (type-safe by default)
+- `app.run()` must be called explicitly to start the event loop
+- Preload scripts use `import { contextBridge, ipcRenderer } from '@bunlet/core'` (not `'electron'`)
+- `win.webContents.send()` and `ipcRenderer.on()` work the same way
+
+---
+
+## Migrating from Tauri
+
+| | Bunlet | Tauri |
+|---|---|---|
+| **Backend language** | TypeScript (Bun) | Rust |
+| **Frontend** | Any (HTML/CSS/JS) | Any (HTML/CSS/JS) |
+| **IPC** | Zod-validated, Electron-compatible | Command-based |
+| **App size** | 20–40MB | 2–10MB |
+| **CEF/Chromium option** | Yes (optional) | No |
+| **Learning curve** | Low (TypeScript) | Moderate (Rust + JS) |
+
+Bunlet lets you write your entire backend in TypeScript instead of splitting logic between Rust and JS. If you're already comfortable with TypeScript and Bun, you get the same native WebView behavior as Tauri without learning Rust for your backend logic.
+
+---
+
+## Related packages
+
+- [@bunlet/cli](https://www.npmjs.com/package/@bunlet/cli) — scaffold, dev server, production build, and platform installers
+- [@bunlet/native](https://www.npmjs.com/package/@bunlet/native) — Rust NAPI-RS native module (installed automatically)
+- [@bunlet/cef](https://www.npmjs.com/package/@bunlet/cef) — optional Chromium backend
+- [Bunlet on GitHub](https://github.com/dipankar/bunlet) — source code, examples, and contribution guide
 
 ---
 

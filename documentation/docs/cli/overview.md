@@ -5,9 +5,9 @@ The Bunlet CLI provides commands for creating, developing, building, and packagi
 ## Installation
 
 ```bash
-npm install -g bunlet-cli
+npm install -g @bunlet/cli
 # or
-bun install -g bunlet-cli
+bun install -g @bunlet/cli
 ```
 
 ## Commands

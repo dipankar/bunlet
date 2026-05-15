@@ -1,17 +1,17 @@
 {
   "name": "@bunlet/native",
   "version": "0.1.0",
-  "description": "Native bindings for Bunlet desktop framework",
+  "description": "Rust native bindings for the Bunlet desktop framework — cross-platform WebView, window management, and OS APIs via NAPI-RS",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
+  "homepage": "https://bunlet.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dipankar/bunlet.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "files": [
     "index.js",
@@ -25,7 +25,14 @@
     "webview",
     "desktop",
     "rust",
-    "napi"
+    "napi",
+    "napi-rs",
+    "ffi",
+    "system-webview",
+    "cross-platform",
+    "bun",
+    "typescript",
+    "electron-alternative"
   ],
   "napi": {
     "name": "bunlet-native",

@@ -51,7 +51,7 @@ my-app/
 ### Entry Point
 
 ```typescript title="src/main/index.ts"
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 import { registerHandlers } from './handlers';
 import { createMenu } from './menu';
 
@@ -92,7 +92,7 @@ export function registerHandlers() {
 ```
 
 ```typescript title="src/main/handlers/files.ts"
-import { app, z } from 'bunlet';
+import { app, z } from '@bunlet/core';
 import * as fs from 'fs';
 
 export function registerFileHandlers() {
@@ -166,7 +166,7 @@ src/renderer/
     "package": "bunlet package"
   },
   "dependencies": {
-    "bunlet": "^0.1.0"
+    "@bunlet/core": "^0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
@@ -206,7 +206,7 @@ Provide icons for all platforms:
 In the main process:
 
 ```typescript
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 import * as path from 'path';
 
 // Get path to assets

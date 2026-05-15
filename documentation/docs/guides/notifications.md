@@ -5,7 +5,7 @@ Display native desktop notifications.
 ## Basic Notification
 
 ```typescript
-import { Notification } from 'bunlet';
+import { Notification } from '@bunlet/core';
 
 const notification = new Notification({
   title: 'Hello',

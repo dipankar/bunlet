@@ -24,7 +24,7 @@ There are three ways to communicate:
 Use `app.handle()` to register IPC handlers in the main process:
 
 ```typescript
-import { app, z } from 'bunlet';
+import { app, z } from '@bunlet/core';
 
 app.handle(
   'greet',
@@ -111,7 +111,7 @@ For production apps, expose a curated API surface via a preload script:
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Request/response
@@ -149,7 +149,7 @@ See [Preload Scripts](preload.md) for the full guide.
 Bunlet uses [Zod](https://zod.dev) for request validation:
 
 ```typescript
-import { app, z } from 'bunlet';
+import { app, z } from '@bunlet/core';
 
 // Simple types
 app.handle('simple', z.object({
@@ -227,7 +227,7 @@ Use `webContents.send()` to push messages to the renderer:
 
 ```typescript
 // Main process
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 
 const win = new BrowserWindow();
 win.loadFile('index.html');
@@ -253,7 +253,7 @@ For better type safety, expose typed event listeners:
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   onNotification: (callback) =>

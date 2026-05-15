@@ -16,7 +16,7 @@ import {
   fileWatcher,
   shell,
   z,
-} from 'bunlet';
+} from '@bunlet/core';
 import path from 'path';
 import fs from 'fs';
 

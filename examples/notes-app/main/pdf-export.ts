@@ -7,8 +7,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { dialog, Notification, shell } from 'bunlet';
-import type { BrowserWindow } from 'bunlet';
+import { dialog, Notification, shell } from '@bunlet/core';
+import type { BrowserWindow } from '@bunlet/core';
 import type { Note } from '../shared/types';
 
 /**

@@ -3,7 +3,7 @@
 Create and control application windows.
 
 ```typescript
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 ```
 
 ## Constructor
@@ -561,7 +561,7 @@ const win = new BrowserWindow({
 ### Remember Window State
 
 ```typescript
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 
 function createWindow() {
   const bounds = loadWindowState();

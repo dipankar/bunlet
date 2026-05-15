@@ -3,7 +3,7 @@
 Create and control application windows.
 
 ```typescript
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 ```
 
 ## Constructor

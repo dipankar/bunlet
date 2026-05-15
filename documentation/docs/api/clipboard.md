@@ -3,7 +3,7 @@
 Read and write to the system clipboard.
 
 ```typescript
-import { clipboard } from 'bunlet';
+import { clipboard } from '@bunlet/core';
 ```
 
 ## Methods

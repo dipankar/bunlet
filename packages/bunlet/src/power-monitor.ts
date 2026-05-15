@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { powerMonitor } from 'bunlet';
+ * import { powerMonitor } from '@bunlet/core';
  *
  * // Listen for power events
  * powerMonitor.on('suspend', () => {

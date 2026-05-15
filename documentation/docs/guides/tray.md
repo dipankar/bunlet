@@ -5,7 +5,7 @@ Create system tray icons with context menus.
 ## Basic Tray
 
 ```typescript
-import { Tray, Menu } from 'bunlet';
+import { Tray, Menu } from '@bunlet/core';
 
 const tray = new Tray('/path/to/icon.png');
 tray.setToolTip('My Application');
@@ -121,7 +121,7 @@ if (tray.isDestroyed()) {
 ### Minimize to Tray
 
 ```typescript
-import { app, BrowserWindow, Tray, Menu } from 'bunlet';
+import { app, BrowserWindow, Tray, Menu } from '@bunlet/core';
 
 let mainWindow: BrowserWindow;
 let tray: Tray;

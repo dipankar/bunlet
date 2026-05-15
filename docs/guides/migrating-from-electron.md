@@ -55,7 +55,7 @@ import { z } from 'zod';
 app.handle('get-version', z.object({}), async () => '1.0.0');
 ```
 
-**Import path:** Use `import { contextBridge, ipcRenderer } from 'bunlet'` (not `'bunlet/renderer'`).
+**Import path:** Use `import { contextBridge, ipcRenderer } from '@bunlet/core'` (not `'bunlet/renderer'`).
 
 **IPCContext:** `app.handle()` receives `{ window: BrowserWindow; windowId: number }`, not `{ window: BrowserWindow; sender: WebContents }`.
 
@@ -107,7 +107,7 @@ Bunlet supports these path names via `app.getPath()`:
 Bunlet's auto-updater uses a provider-based architecture:
 
 ```ts
-import { autoUpdater } from 'bunlet';
+import { autoUpdater } from '@bunlet/core';
 
 // GitHub releases
 autoUpdater.setFeedURL({
@@ -134,7 +134,7 @@ autoUpdater.setRolloutPolicy({
 **Custom install strategy:**
 
 ```ts
-import { AutoUpdater } from 'bunlet';
+import { AutoUpdater } from '@bunlet/core';
 
 const updater = new AutoUpdater();
 updater.registerInstallStrategy('freebsd', myCustomInstallStrategy);

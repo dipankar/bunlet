@@ -5,7 +5,7 @@
  * with TAO's event loop. This will be fixed in a future release.
  */
 
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null = null;

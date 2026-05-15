@@ -5,7 +5,7 @@ Register system-wide keyboard shortcuts.
 ## Registering Shortcuts
 
 ```typescript
-import { globalShortcut } from 'bunlet';
+import { globalShortcut } from '@bunlet/core';
 
 const registered = globalShortcut.register('CmdOrCtrl+Shift+Space', () => {
   console.log('Shortcut triggered!');

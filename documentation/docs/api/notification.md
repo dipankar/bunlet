@@ -3,7 +3,7 @@
 Display desktop notifications.
 
 ```typescript
-import { Notification } from 'bunlet';
+import { Notification } from '@bunlet/core';
 ```
 
 ## Constructor

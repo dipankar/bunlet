@@ -2,7 +2,7 @@
  * Hello World - Bunlet Example Application
  */
 
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 // Register IPC handlers (synchronous, runs immediately)

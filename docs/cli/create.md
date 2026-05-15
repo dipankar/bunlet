@@ -105,7 +105,7 @@ export default defineConfig({
 ### `src/main.ts`
 
 ```typescript
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 
 function createWindow() {
   const win = new BrowserWindow({

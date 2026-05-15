@@ -3,7 +3,7 @@
 Display native file dialogs and message boxes.
 
 ```typescript
-import { dialog } from 'bunlet';
+import { dialog } from '@bunlet/core';
 ```
 
 ## Methods

@@ -2,7 +2,7 @@
  * Preload script for Power Monitor
  */
 
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Get battery information

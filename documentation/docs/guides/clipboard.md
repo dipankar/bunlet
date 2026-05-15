@@ -5,7 +5,7 @@ Read and write to the system clipboard.
 ## Reading Text
 
 ```typescript
-import { clipboard } from 'bunlet';
+import { clipboard } from '@bunlet/core';
 
 const text = clipboard.readText();
 console.log('Clipboard contains:', text);
@@ -14,7 +14,7 @@ console.log('Clipboard contains:', text);
 ## Writing Text
 
 ```typescript
-import { clipboard } from 'bunlet';
+import { clipboard } from '@bunlet/core';
 
 clipboard.writeText('Hello, World!');
 ```
@@ -41,7 +41,7 @@ clipboard.clear();
 ### Copy to Clipboard
 
 ```typescript
-import { app, z, clipboard } from 'bunlet';
+import { app, z, clipboard } from '@bunlet/core';
 
 app.handle('clipboard:copy', z.object({
   text: z.string(),

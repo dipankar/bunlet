@@ -3,7 +3,7 @@
 The `app` module controls your application's lifecycle.
 
 ```typescript
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 ```
 
 ## Methods
@@ -382,7 +382,7 @@ console.log(app.version); // '1.0.0'
 ## Example
 
 ```typescript
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 import { z } from 'zod';
 
 let mainWindow: BrowserWindow | null = null;

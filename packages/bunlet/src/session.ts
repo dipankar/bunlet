@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { Session, session } from 'bunlet';
+ * import { Session, session } from '@bunlet/core';
  *
  * // Get default session
  * const defaultSession = session.defaultSession;

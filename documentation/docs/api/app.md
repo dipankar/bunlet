@@ -3,7 +3,7 @@
 The `app` module controls your application's lifecycle and provides system integration.
 
 ```typescript
-import { app } from 'bunlet';
+import { app } from '@bunlet/core';
 ```
 
 ## Methods
@@ -296,7 +296,7 @@ if (app.isQuitting) {
 ## Example
 
 ```typescript
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 
 // Register handlers
 app.handle('get-version', z.object({}), () => {

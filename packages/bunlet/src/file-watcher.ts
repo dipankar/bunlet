@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { fileWatcher } from 'bunlet';
+ * import { fileWatcher } from '@bunlet/core';
  *
  * // Watch a directory for changes
  * const watcher = fileWatcher.watch('/path/to/dir', {

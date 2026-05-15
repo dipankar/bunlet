@@ -2,7 +2,7 @@
  * IPC Handlers for Notes App
  */
 
-import { app, z } from 'bunlet';
+import { app, z } from '@bunlet/core';
 import { getStorage } from './storage';
 
 const storage = getStorage();

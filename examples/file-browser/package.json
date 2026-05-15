@@ -10,6 +10,6 @@
     "dev": "bun run main.ts"
   },
   "dependencies": {
-    "bunlet": "workspace:*"
+    "@bunlet/core": "workspace:*"
   }
 }

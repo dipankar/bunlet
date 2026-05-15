@@ -40,7 +40,7 @@ bun run doctor
 
 ```typescript
 // main.ts
-import { app, BrowserWindow, z } from 'bunlet';
+import { app, BrowserWindow, z } from '@bunlet/core';
 import path from 'path';
 
 app.handle('greet', z.object({ name: z.string() }), async (params) => {

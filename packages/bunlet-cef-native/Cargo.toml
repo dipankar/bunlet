@@ -2,12 +2,12 @@
 name = "bunlet-cef-native"
 version = "0.1.0"
 edition = "2021"
-description = "Native CEF bindings for Bunlet desktop framework"
+description = "Native CEF (Chromium Embedded Framework) bindings using NAPI-RS — full Chromium 146+ backend for the Bunlet desktop framework"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/dipankar/bunlet"
 homepage = "https://bunlet.dev"
-keywords = ["cef", "chromium", "webview", "desktop", "bun"]
+keywords = ["cef", "chromium", "webview", "embedded-browser", "napi-rs"]
 categories = ["gui", "web-programming"]
 authors = ["Bunlet Contributors"]
 

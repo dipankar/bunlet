@@ -2,7 +2,7 @@
  * Preload script for File Browser
  */
 
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Navigation

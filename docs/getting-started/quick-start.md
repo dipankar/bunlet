@@ -52,7 +52,7 @@ Your app window opens automatically with:
 The main process runs in Bun and has full system access:
 
 ```typescript
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 
 // Wait for app to be ready
 app.whenReady().then(() => {
@@ -154,7 +154,7 @@ In your main process, register handlers for renderer calls:
 
 ```typescript
 // src/main.ts
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 import { z } from 'zod';
 
 // Define handler with type validation

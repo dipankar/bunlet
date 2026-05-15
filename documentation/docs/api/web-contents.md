@@ -256,7 +256,7 @@ webContents.on('preload-error', ({ path, message }) => {
 ## Example
 
 ```typescript
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 import path from 'path';
 
 const win = new BrowserWindow({

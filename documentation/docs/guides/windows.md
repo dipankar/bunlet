@@ -5,7 +5,7 @@ Learn how to create and manage application windows in Bunlet.
 ## Creating a Window
 
 ```typescript
-import { BrowserWindow } from 'bunlet';
+import { BrowserWindow } from '@bunlet/core';
 
 const win = new BrowserWindow({
   width: 800,
@@ -191,7 +191,7 @@ const win = BrowserWindow.fromId(1);
 ## Multiple Windows
 
 ```typescript
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 
 const windows = new Map<number, BrowserWindow>();
 

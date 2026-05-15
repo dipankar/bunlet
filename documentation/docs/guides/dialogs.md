@@ -5,7 +5,7 @@ Display native file dialogs and message boxes.
 ## File Open Dialog
 
 ```typescript
-import { dialog, BrowserWindow } from 'bunlet';
+import { dialog, BrowserWindow } from '@bunlet/core';
 
 const result = await dialog.showOpenDialog(null, {
   title: 'Select a file',

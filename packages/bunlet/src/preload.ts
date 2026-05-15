@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { preload, contextBridge, ipcRenderer } from 'bunlet';
+ * import { preload, contextBridge, ipcRenderer } from '@bunlet/core';
  *
  * if (preload.isPreloadContext()) {
  *   contextBridge.exposeInMainWorld('api', {

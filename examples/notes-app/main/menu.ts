@@ -2,9 +2,9 @@
  * Application Menu for Notes App
  */
 
-import { Menu, shell, dialog } from 'bunlet';
-import type { BrowserWindow } from 'bunlet';
-import type { MenuItemOptions } from 'bunlet';
+import { Menu, shell, dialog } from '@bunlet/core';
+import type { BrowserWindow } from '@bunlet/core';
+import type { MenuItemOptions } from '@bunlet/core';
 
 export function createAppMenu(mainWindow: BrowserWindow): Menu {
   const isMac = process.platform === 'darwin';

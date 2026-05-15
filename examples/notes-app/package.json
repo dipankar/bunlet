@@ -9,7 +9,7 @@
     "package": "bunlet package"
   },
   "dependencies": {
-    "bunlet": "workspace:*",
+    "@bunlet/core": "workspace:*",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

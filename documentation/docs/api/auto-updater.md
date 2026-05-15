@@ -3,7 +3,7 @@
 Enable automatic application updates.
 
 ```typescript
-import { autoUpdater } from 'bunlet';
+import { autoUpdater } from '@bunlet/core';
 ```
 
 ## Methods
@@ -149,7 +149,7 @@ autoUpdater.on('before-quit-for-update', () => {
 ## Example
 
 ```typescript
-import { app, autoUpdater, dialog, Notification } from 'bunlet';
+import { app, autoUpdater, dialog, Notification } from '@bunlet/core';
 
 const UPDATE_SERVER = 'https://releases.example.com';
 

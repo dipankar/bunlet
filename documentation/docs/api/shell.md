@@ -3,7 +3,7 @@
 Manage files and URLs using the system's default applications.
 
 ```typescript
-import { shell } from 'bunlet';
+import { shell } from '@bunlet/core';
 ```
 
 ## Methods

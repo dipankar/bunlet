@@ -7,7 +7,7 @@ Interact with the system shell and file manager.
 Open a URL in the default browser:
 
 ```typescript
-import { shell } from 'bunlet';
+import { shell } from '@bunlet/core';
 
 await shell.openExternal('https://bunlet.dev');
 ```

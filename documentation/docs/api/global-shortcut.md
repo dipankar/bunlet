@@ -3,7 +3,7 @@
 Register and manage global keyboard shortcuts.
 
 ```typescript
-import { globalShortcut } from 'bunlet';
+import { globalShortcut } from '@bunlet/core';
 ```
 
 ## Methods
@@ -125,7 +125,7 @@ Shortcuts use modifier keys combined with regular keys:
 ## Example
 
 ```typescript
-import { app, globalShortcut, BrowserWindow } from 'bunlet';
+import { app, globalShortcut, BrowserWindow } from '@bunlet/core';
 
 app.whenReady().then(() => {
   const win = new BrowserWindow();

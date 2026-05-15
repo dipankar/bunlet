@@ -13,7 +13,7 @@ Bunlet's auto-updater supports multiple update sources:
 ## Basic Setup
 
 ```typescript
-import { autoUpdater } from 'bunlet';
+import { autoUpdater } from '@bunlet/core';
 
 // Configure update source
 autoUpdater.setFeedURL({

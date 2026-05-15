@@ -18,7 +18,7 @@ the full IPC bridge. In production apps, you should:
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Request/response patterns
@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
 
 ```typescript
 // main.ts
-import { app, BrowserWindow } from 'bunlet';
+import { app, BrowserWindow } from '@bunlet/core';
 import path from 'path';
 
 const win = new BrowserWindow({
@@ -64,7 +64,7 @@ For main-to-renderer push events, expose typed listeners:
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Request/response
@@ -99,7 +99,7 @@ unsubscribe();
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 type ClipboardItem = { text: string; timestamp: number };
 
@@ -125,7 +125,7 @@ contextBridge.exposeInMainWorld('api', {
 
 ```typescript
 // main.ts
-import { app, BrowserWindow, clipboard, z } from 'bunlet';
+import { app, BrowserWindow, clipboard, z } from '@bunlet/core';
 import path from 'path';
 
 let history: Array<{ text: string; timestamp: number }> = [];
@@ -182,7 +182,7 @@ export interface Api {
 
 ```typescript
 // preload.ts
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 import type { Api } from './shared/types';
 
 const api: Api = {

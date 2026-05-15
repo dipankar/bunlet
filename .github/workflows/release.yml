@@ -134,16 +134,16 @@ jobs:
           cp cef-artifacts/bunlet-cef-*/bunlet-cef-helper* packages/bunlet-cef/ || true
 
       - name: Publish @bunlet/native
-        run: cd packages/bunlet-native && npm publish --provenance
+        run: cd packages/bunlet-native && npm publish
 
       - name: Publish @bunlet/cef
-        run: cd packages/bunlet-cef && npm publish --provenance
+        run: cd packages/bunlet-cef && npm publish
 
-      - name: Publish bunlet
-        run: cd packages/bunlet && npm publish --provenance
+      - name: Publish @bunlet/core
+        run: cd packages/bunlet && npm publish
 
       - name: Publish @bunlet/cli
-        run: cd packages/bunlet-cli && npm publish --provenance
+        run: cd packages/bunlet-cli && npm publish
 
   publish-cargo:
     name: Publish to crates.io
@@ -166,15 +166,19 @@ jobs:
             packages/bunlet-native -> target
             packages/bunlet-cef-native -> target
 
+      - name: Get crates.io OIDC token
+        uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
       - name: Publish bunlet-native
         run: cargo publish --manifest-path packages/bunlet-native/Cargo.toml
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish bunlet-cef-native
         run: cargo publish --manifest-path packages/bunlet-cef-native/Cargo.toml
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
   github-release:
     name: Create GitHub Release

@@ -8,7 +8,7 @@
  * - Suspend/resume events
  */
 
-import { app, BrowserWindow, powerMonitor, z } from 'bunlet';
+import { app, BrowserWindow, powerMonitor, z } from '@bunlet/core';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null = null;

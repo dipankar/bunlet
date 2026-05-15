@@ -1,17 +1,17 @@
 {
   "name": "@bunlet/cef",
   "version": "0.1.0",
-  "description": "CEF (Chromium Embedded Framework) backend for Bunlet",
+  "description": "Chromium Embedded Framework (CEF) backend for Bunlet — full Chromium 146+ runtime as an alternative to system WebView",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
+  "homepage": "https://bunlet.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dipankar/bunlet.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release && bun run copy-artifact",
@@ -44,7 +44,14 @@
     "bunlet",
     "cef",
     "chromium",
+    "chromium-embedded",
     "webview",
-    "desktop"
+    "desktop",
+    "bun",
+    "embedded-browser",
+    "full-chromium",
+    "devtools",
+    "cross-platform",
+    "electron-alternative"
   ]
 }

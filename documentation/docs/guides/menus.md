@@ -7,7 +7,7 @@ Create application menus and context menus in Bunlet.
 Set the application's main menu bar:
 
 ```typescript
-import { Menu, MenuItem, BrowserWindow } from 'bunlet';
+import { Menu, MenuItem, BrowserWindow } from '@bunlet/core';
 
 const menu = Menu.buildFromTemplate([
   {
@@ -186,7 +186,7 @@ Define keyboard shortcuts with accelerators:
 Create right-click menus:
 
 ```typescript
-import { Menu } from 'bunlet';
+import { Menu } from '@bunlet/core';
 
 const contextMenu = Menu.buildFromTemplate([
   { label: 'Cut', role: 'cut' },

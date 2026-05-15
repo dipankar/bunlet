@@ -2,7 +2,7 @@
  * Preload script for Clipboard Manager
  */
 
-import { contextBridge, ipcRenderer } from 'bunlet';
+import { contextBridge, ipcRenderer } from '@bunlet/core';
 
 contextBridge.exposeInMainWorld('api', {
   // Get clipboard history

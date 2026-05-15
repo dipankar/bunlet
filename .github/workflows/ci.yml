@@ -28,6 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev pkg-config libxdo-dev xvfb
+
       - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
@@ -36,6 +45,12 @@ jobs:
       - name: Build packages
         run: bun run build:packages
 
+      - name: Build native addon
+        run: |
+          cd packages/bunlet-native
+          cargo build --release
+          bun run scripts/copy-artifact.js
+
       - name: Type check
         run: bun run typecheck
 
@@ -43,7 +58,12 @@ jobs:
         run: bun run lint
 
       - name: Run tests
+        if: matrix.os != 'ubuntu-latest'
         run: bun test
+
+      - name: Run tests (with virtual display)
+        if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run bun test
 
       - name: Run benchmark tests
         run: bun test packages/bunlet/src/benchmark.test.ts
@@ -100,7 +120,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev pkg-config
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev pkg-config libxdo-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

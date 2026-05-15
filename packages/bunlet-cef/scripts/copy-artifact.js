@@ -1,8 +1,25 @@
 const fs = require('fs');
 const path = require('path');
 
+function parseTarget(target) {
+  let platform = process.platform;
+  let arch = process.arch;
+
+  if (target.includes('darwin')) platform = 'darwin';
+  else if (target.includes('linux')) platform = 'linux';
+  else if (target.includes('windows') || target.includes('pc-windows')) platform = 'win32';
+
+  if (target.startsWith('x86_64') || target.startsWith('i686')) arch = 'x64';
+  else if (target.startsWith('aarch64') || target.startsWith('arm64')) arch = 'arm64';
+
+  return { platform, arch };
+}
+
+const target = process.env.CARGO_BUILD_TARGET;
+const { platform, arch } = target ? parseTarget(target) : { platform: process.platform, arch: process.arch };
+
 const mode = process.argv[2] === 'debug' ? 'debug' : 'release';
-const platformArch = `${process.platform}-${process.arch}`;
+const platformArch = `${platform}-${arch}`;
 
 const sourceByPlatform = {
   linux: 'libbunlet_cef_native.so',
@@ -24,21 +41,24 @@ const helperByPlatform = {
   win32: 'bunlet-cef-helper.exe',
 };
 
-const sourceName = sourceByPlatform[process.platform];
+const sourceName = sourceByPlatform[platform];
 const targetName = targetByPlatformArch[platformArch];
-const helperName = helperByPlatform[process.platform];
+const helperName = helperByPlatform[platform];
 
 if (!sourceName || !targetName || !helperName) {
   throw new Error(`Unsupported platform for CEF artifact copy: ${platformArch}`);
 }
+
+const targetDir = target
+  ? path.join('target', target, mode)
+  : path.join('target', mode);
 
 const sourcePath = path.resolve(
   __dirname,
   '..',
   '..',
   'bunlet-cef-native',
-  'target',
-  mode,
+  targetDir,
   sourceName
 );
 const targetPath = path.resolve(__dirname, '..', targetName);
@@ -56,8 +76,7 @@ const helperSourcePath = path.resolve(
   '..',
   '..',
   'bunlet-cef-native',
-  'target',
-  mode,
+  targetDir,
   helperName
 );
 const helperTargetPath = path.resolve(__dirname, '..', helperName);

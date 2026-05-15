@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 "on":
   push:
     tags:
@@ -20,7 +23,7 @@ jobs:
           - os: macos-latest
             platform: darwin-arm64
             rust-target: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-latest
             platform: darwin-x64
             rust-target: x86_64-apple-darwin
           - os: ubuntu-latest
@@ -44,14 +47,21 @@ jobs:
         run: bun install
 
       - name: Build bunlet-native
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
         run: |
           cd packages/bunlet-native
-          bun run build
+          cargo build --release --target ${{ matrix.rust-target }}
+          bun run scripts/copy-artifact.js
 
       - name: Build bunlet-cef-native
+        id: build-cef
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
         run: |
           cd packages/bunlet-cef
-          bun run build
+          cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release --target ${{ matrix.rust-target }}
+          bun run copy-artifact
         continue-on-error: true
 
       - name: Build CLI
@@ -86,6 +96,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload bunlet-cef artifacts
+        if: steps.build-cef.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: bunlet-cef-${{ matrix.platform }}
@@ -133,17 +144,22 @@ jobs:
           cp cef-artifacts/bunlet-cef-*/*.node packages/bunlet-cef/ || true
           cp cef-artifacts/bunlet-cef-*/bunlet-cef-helper* packages/bunlet-cef/ || true
 
+      - name: Configure npm authentication
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish @bunlet/native
-        run: cd packages/bunlet-native && npm publish
+        run: cd packages/bunlet-native && npm publish --provenance
 
       - name: Publish @bunlet/cef
-        run: cd packages/bunlet-cef && npm publish
+        run: cd packages/bunlet-cef && npm publish --provenance
 
       - name: Publish @bunlet/core
-        run: cd packages/bunlet && npm publish
+        run: cd packages/bunlet && npm publish --provenance
 
       - name: Publish @bunlet/cli
-        run: cd packages/bunlet-cli && npm publish
+        run: cd packages/bunlet-cli && npm publish --provenance
 
   publish-cargo:
     name: Publish to crates.io
@@ -171,12 +187,24 @@ jobs:
         id: auth
 
       - name: Publish bunlet-native
-        run: cargo publish --manifest-path packages/bunlet-native/Cargo.toml
+        run: |
+          VERSION=$(grep -m1 '^version' packages/bunlet-native/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if ! cargo search bunlet-native --limit 1 2>/dev/null | grep -q "^bunlet-native = \"$VERSION\""; then
+            cargo publish --manifest-path packages/bunlet-native/Cargo.toml
+          else
+            echo "bunlet-native v$VERSION already published, skipping"
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish bunlet-cef-native
-        run: cargo publish --manifest-path packages/bunlet-cef-native/Cargo.toml
+        run: |
+          VERSION=$(grep -m1 '^version' packages/bunlet-cef-native/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if ! cargo search bunlet-cef-native --limit 1 2>/dev/null | grep -q "^bunlet-cef-native = \"$VERSION\""; then
+            cargo publish --manifest-path packages/bunlet-cef-native/Cargo.toml
+          else
+            echo "bunlet-cef-native v$VERSION already published, skipping"
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 

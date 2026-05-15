@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 "on":
   push:
     branches: [main]
@@ -29,6 +32,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Build packages
+        run: bun run build:packages
 
       - name: Type check
         run: bun run typecheck
@@ -77,7 +83,7 @@ jobs:
           - os: macos-latest
             platform: darwin-arm64
             rust-target: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-latest
             platform: darwin-x64
             rust-target: x86_64-apple-darwin
           - os: ubuntu-latest
@@ -108,10 +114,21 @@ jobs:
         run: bun install
 
       - name: Build bunlet-native
-        run: cd packages/bunlet-native && bun run build
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
+        run: |
+          cd packages/bunlet-native
+          cargo build --release --target ${{ matrix.rust-target }}
+          bun run scripts/copy-artifact.js
 
       - name: Build bunlet-cef-native
-        run: cd packages/bunlet-cef && bun run build
+        id: build-cef
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
+        run: |
+          cd packages/bunlet-cef
+          cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release --target ${{ matrix.rust-target }}
+          bun run copy-artifact
         continue-on-error: true
 
       - name: Upload bunlet-native artifacts
@@ -121,13 +138,14 @@ jobs:
           path: packages/bunlet-native/*.node
 
       - name: Upload bunlet-cef artifacts
+        if: steps.build-cef.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: bunlet-cef-${{ matrix.platform }}
           path: |
             packages/bunlet-cef/*.node
             packages/bunlet-cef/bunlet-cef-helper*
-        if: ${{ !cancelled() }}
+          if-no-files-found: warn
 
   binary-size:
     name: Binary size report

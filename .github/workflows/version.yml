@@ -1,5 +1,8 @@
 name: Version Bump
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 "on":
   workflow_dispatch:
     inputs:
@@ -42,7 +45,7 @@ jobs:
         run: bun run scripts/generate-changelog.ts
 
       - name: Show changes (dry run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
+        if: ${{ inputs.dry_run == true }}
         run: |
           echo "### Version bump diff"
           git diff
@@ -51,7 +54,7 @@ jobs:
           tail -n 40 CHANGELOG.md
 
       - name: Commit version bump
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run != true }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           git add -A
@@ -61,7 +64,7 @@ jobs:
           git push origin "v${VERSION}"
 
       - name: Create release PR (dry run path)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
+        if: ${{ inputs.dry_run == true }}
         run: |
           echo "Dry run complete. No changes were pushed."
           echo "Set dry_run=false to commit, tag, and push."

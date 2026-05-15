@@ -6,6 +6,7 @@ import { EventEmitter } from 'events';
 import type { BrowserWindowOptions, Rectangle, BunletEvent } from './types';
 import type { Session } from './session';
 import { screen } from './screen';
+import { BunletError, BunletErrorCode } from './errors';
 import * as path from 'path';
 import * as fs from 'fs';
 import { assertRuntimeCapability, native } from './runtime';
@@ -337,37 +338,73 @@ export class BrowserWindow extends EventEmitter {
       ? preloadPath
       : path.resolve(process.cwd(), preloadPath);
 
-    if (fs.existsSync(absolutePath)) {
-      if (/\.(ts|tsx|mts|cts)$/i.test(absolutePath)) {
-        return this.transpilePreloadScript(absolutePath);
-      }
+    // 1. Check for pre-compiled .bunlet-preload.js (build output)
+    const compiledPath = absolutePath.replace(/\.(ts|tsx|mts|cts)$/i, '.bunlet-preload.js');
+    if (compiledPath !== absolutePath && fs.existsSync(compiledPath)) {
+      return compiledPath;
+    }
+
+    // 2. Direct .js path exists — use it
+    if (/\.js$/i.test(absolutePath) && fs.existsSync(absolutePath)) {
       return absolutePath;
     }
 
-    // Build output fallback (preload.ts -> preload.js in current working directory)
-    const fallbackPath = path.resolve(
+    // 3. TypeScript source — transpile at runtime (dev mode only)
+    if (/\.(ts|tsx|mts|cts)$/i.test(absolutePath)) {
+      if (!fs.existsSync(absolutePath)) {
+        return this.tryBuildOutputFallback(preloadPath);
+      }
+      return this.transpilePreloadScript(absolutePath);
+    }
+
+    // 4. Build output fallback (e.g. preload.ts → preload.js from build)
+    return this.tryBuildOutputFallback(preloadPath);
+  }
+
+  private tryBuildOutputFallback(preloadPath: string): string | undefined {
+    const jsFallback = path.resolve(
       process.cwd(),
       path.basename(preloadPath).replace(/\.(ts|tsx|mts|cts)$/i, '.js')
     );
-    if (fs.existsSync(fallbackPath)) {
-      return fallbackPath;
+    if (fs.existsSync(jsFallback)) {
+      return jsFallback;
     }
 
-    console.warn(`Preload script not found: ${absolutePath}`);
+    const compiledFallback = path.resolve(
+      process.cwd(),
+      path.basename(preloadPath).replace(/\.(ts|tsx|mts|cts)$/i, '.bunlet-preload.js')
+    );
+    if (fs.existsSync(compiledFallback)) {
+      return compiledFallback;
+    }
+
+    console.warn(
+      `[bunlet] Preload script not found: ${preloadPath}. ` +
+      `Preload scripts must be compiled to .js or .bunlet-preload.js before running. ` +
+      `Use "bunlet build" to compile your app.`
+    );
     return undefined;
   }
 
   private transpilePreloadScript(tsPath: string): string {
+    const jsPath = tsPath.replace(/\.(ts|tsx|mts|cts)$/i, '.bunlet-preload.js');
+
     try {
       const tsContent = fs.readFileSync(tsPath, 'utf-8');
-      const jsPath = tsPath.replace(/\.(ts|tsx|mts|cts)$/i, '.bunlet-preload.js');
       const transpiler = new Bun.Transpiler({ loader: 'ts' });
       const transpiled = transpiler.transformSync(tsContent);
       fs.writeFileSync(jsPath, transpiled);
       return jsPath;
     } catch (e) {
-      console.warn(`Failed to transpile preload script ${tsPath}:`, e);
-      return tsPath;
+      const errMsg = e instanceof Error ? e.message : String(e);
+      throw new BunletError(
+        BunletErrorCode.PRELOAD_FAILED,
+        `Failed to transpile preload script "${tsPath}". ` +
+        `This may happen in a read-only packaged app. Preload scripts must be compiled ` +
+        `to .js or .bunlet-preload.js at build time. Use "bunlet build" to compile your app.\n` +
+        `Original error: ${errMsg}`,
+        { cause: e }
+      );
     }
   }
 

@@ -177,55 +177,61 @@ export abstract class BaseProvider implements UpdateProvider {
   }
 
   /**
-   * Parse a version string into comparable parts.
-   * Pre-release tags (alpha, beta, rc) are treated as lower than the
-   * numeric part they attach to: 1.0.0-alpha < 1.0.0 < 1.0.1
-   */
-  protected parseVersion(version: string): Array<{ num: number; pre?: string }> {
-    const stripped = version.replace(/^v/, '');
-    // Split on "."  then separate any "-" pre-release suffix
-    return stripped.split('.').map((segment) => {
-      const dashIdx = segment.indexOf('-');
-      if (dashIdx === -1) {
-        const num = parseInt(segment, 10);
-        return { num: Number.isNaN(num) ? 0 : num };
-      }
-      const num = parseInt(segment.slice(0, dashIdx), 10);
-      const pre = segment.slice(dashIdx + 1);
-      return { num: Number.isNaN(num) ? 0 : num, pre };
-    });
-  }
-
-  /**
-   * Compare two version strings.
+   * Compare two version strings (delegates to standalone utility).
    * Returns: -1 if a < b, 0 if a == b, 1 if a > b
    * Pre-release versions sort before their release: 1.0.0-alpha < 1.0.0
    */
   compareVersions(a: string, b: string): number {
-    const partsA = this.parseVersion(a);
-    const partsB = this.parseVersion(b);
-    const maxLength = Math.max(partsA.length, partsB.length);
+    return compareVersions(a, b);
+  }
+}
 
-    for (let i = 0; i < maxLength; i++) {
-      const pA = partsA[i] || { num: 0 };
-      const pB = partsB[i] || { num: 0 };
+/**
+ * Parse a version string into comparable parts.
+ * Pre-release tags (alpha, beta, rc) sort before their numeric release.
+ */
+export function parseVersion(version: string): Array<{ num: number; pre?: string }> {
+  const stripped = version.replace(/^v/, '');
+  return stripped.split('.').map((segment) => {
+    const dashIdx = segment.indexOf('-');
+    if (dashIdx === -1) {
+      const num = parseInt(segment, 10);
+      return { num: Number.isNaN(num) ? 0 : num };
+    }
+    const num = parseInt(segment.slice(0, dashIdx), 10);
+    const pre = segment.slice(dashIdx + 1);
+    return { num: Number.isNaN(num) ? 0 : num, pre };
+  });
+}
 
-      if (pA.num !== pB.num) {
-        return pA.num > pB.num ? 1 : -1;
-      }
+/**
+ * Compare two version strings.
+ * Returns: -1 if a < b, 0 if a == b, 1 if a > b
+ * Pre-release versions sort before their release: 1.0.0-alpha < 1.0.0
+ */
+export function compareVersions(a: string, b: string): number {
+  const partsA = parseVersion(a);
+  const partsB = parseVersion(b);
+  const maxLength = Math.max(partsA.length, partsB.length);
 
-      // Same numeric part — a pre-release sorts before the release
-      const preA = pA.pre ?? null;
-      const preB = pB.pre ?? null;
+  for (let i = 0; i < maxLength; i++) {
+    const pA = partsA[i] || { num: 0 };
+    const pB = partsB[i] || { num: 0 };
 
-      if (preA === null && preB !== null) return 1;
-      if (preA !== null && preB === null) return -1;
-      if (preA !== null && preB !== null) {
-        const cmp = preA.localeCompare(preB);
-        if (cmp !== 0) return cmp;
-      }
+    if (pA.num !== pB.num) {
+      return pA.num > pB.num ? 1 : -1;
     }
 
-    return 0;
+    const preA = pA.pre ?? null;
+    const preB = pB.pre ?? null;
+
+    if (preA === null && preB !== null) return 1;
+    if (preA !== null && preB === null) return -1;
+    if (preA !== null && preB !== null) {
+      const cmp = preA.localeCompare(preB);
+      if (cmp !== 0) return cmp;
+    }
   }
+
+  return 0;
 }

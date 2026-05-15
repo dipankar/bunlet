@@ -120,6 +120,9 @@ export type { RuntimeBackend, RuntimeCapabilities } from './runtime';
 export { createLogger, collectDiagnostics, printDiagnostics } from './debug';
 export type { Logger, LogLevel } from './debug';
 
+// Error taxonomy
+export { BunletError, BunletErrorCode } from './errors';
+
 // Performance budgets (for CI and release gating)
 export { performanceBudgets, binarySizeBudgets, coverageTargets } from './performance-budgets';
 export type { PerformanceBudget, BinarySizeBudget, CoverageTarget } from './performance-budgets';

@@ -26,6 +26,7 @@
   "scripts": {
     "build": "bun build ./src/index.ts ./src/renderer.ts ./src/config.ts --outdir ./dist --target bun --external @bunlet/native --external @bunlet/cef && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
+    "typecheck": "tsc --noEmit",
     "dev": "bun run build --watch",
     "test": "bun test"
   },

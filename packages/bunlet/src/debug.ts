@@ -71,7 +71,7 @@ function isNamespaceEnabled(namespace: string): boolean {
   return enabledPatterns.some((pattern) => pattern.test(fullNamespace) || pattern.test(namespace));
 }
 
-function formatLogArgs(level: LogLevel, namespace: string, message: string, args: unknown[]): string[] {
+function formatLogArgs(level: LogLevel, namespace: string, message: string, args: unknown[]): unknown[] {
   const prefix = `[bunlet:${namespace}] ${level.toUpperCase()}`;
   if (args.length === 0) return [prefix, message];
   return [prefix, message, ...args];

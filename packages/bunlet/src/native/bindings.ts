@@ -6,6 +6,7 @@
 import type * as NativeTypes from '@bunlet/native';
 import * as fs from 'fs';
 import * as path from 'path';
+import { BunletError, BunletErrorCode } from '../errors';
 
 export type RuntimeEngine = 'system' | 'cef';
 
@@ -43,8 +44,11 @@ export function loadBinding(): typeof NativeTypes {
       // @ts-ignore - optional package
       return require('@bunlet/cef');
     } catch (e) {
-      throw new Error(
-        `CEF engine requested but @bunlet/cef failed to load. Ensure it is installed and built (run "bun --filter @bunlet/cef run build"). ${String(e)}`
+      throw new BunletError(
+        BunletErrorCode.NATIVE_LOAD_FAILED,
+        'CEF engine requested but @bunlet/cef failed to load. ' +
+        'Ensure it is installed and built (run "bun --filter @bunlet/cef run build").',
+        { cause: e }
       );
     }
   }
@@ -53,9 +57,11 @@ export function loadBinding(): typeof NativeTypes {
     // @ts-ignore - Dynamic require for native addon
     return require('@bunlet/native');
   } catch (e) {
-    console.error('Failed to load native bindings:', e);
-    console.error('Make sure to run: cd packages/bunlet-native && bun run build');
-    throw new Error('Native bindings not found. Please build the native module first.');
+    throw new BunletError(
+      BunletErrorCode.NATIVE_LOAD_FAILED,
+      'Native bindings not found. Please build the native module first: cd packages/bunlet-native && bun run build',
+      { cause: e }
+    );
   }
 }
 

@@ -102,6 +102,101 @@ pub fn get_all_window_ids() -> Vec<u32> {
     WINDOWS.lock().keys().cloned().collect()
 }
 
+fn app_root() -> std::path::PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+fn resolve_safe_path(request_path: &str) -> std::result::Result<std::path::PathBuf, wry::http::Response<std::borrow::Cow<'static, [u8]>>> {
+    use std::borrow::Cow;
+    use wry::http::{Response, StatusCode};
+
+    let file_path = request_path.trim_start_matches('/');
+    if file_path.is_empty() {
+        return Err(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Cow::Borrowed(b"Bad request" as &[u8]))
+            .unwrap());
+    }
+
+    let root = app_root();
+    let candidate = if std::path::Path::new(file_path).is_absolute() {
+        std::path::PathBuf::from(file_path)
+    } else {
+        root.join(file_path)
+    };
+
+    let canonical = candidate.canonicalize().unwrap_or(candidate);
+    let canonical_root = root.canonicalize().unwrap_or(root);
+
+    if !canonical.starts_with(&canonical_root) {
+        return Err(Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Cow::Borrowed(b"Forbidden" as &[u8]))
+            .unwrap());
+    }
+
+    Ok(canonical)
+}
+
+fn mime_type_for_path(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("html") | Some("htm") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("svg") => "image/svg+xml",
+        Some("webp") => "image/webp",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        Some("ico") => "image/x-icon",
+        Some("txt") => "text/plain; charset=utf-8",
+        Some("xml") => "application/xml",
+        Some("pdf") => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
+fn serve_app_protocol(
+    request: wry::http::Request<Vec<u8>>,
+) -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
+    use std::borrow::Cow;
+    use wry::http::{Response, StatusCode};
+
+    let path = request.uri().path().to_string();
+    let safe_path = match resolve_safe_path(&path) {
+        Ok(p) => p,
+        Err(resp) => return resp,
+    };
+
+    match std::fs::read(&safe_path) {
+        Ok(content) => {
+            let mime = mime_type_for_path(&safe_path);
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", mime)
+                .header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' data: blob: https: http:")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(Cow::Owned(content))
+                .unwrap_or_else(|_| {
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Cow::Borrowed(b"Internal server error" as &[u8]))
+                        .unwrap()
+                })
+        }
+        Err(_) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .body(Cow::Borrowed(b"Not found" as &[u8]))
+            .unwrap(),
+    }
+}
+
 fn build_initialization_script(options: &WindowOptions) -> std::result::Result<String, String> {
     let mut script = r#"
         // Bunlet IPC bridge
@@ -421,75 +516,6 @@ pub fn create_window_in_loop(
 
     let init_script = build_initialization_script(options)?;
 
-    // Custom protocol handler for app:// URLs
-    // This allows loading local files via app://path/to/file
-    #[cfg(target_os = "linux")]
-    let app_protocol_handler = |_webview_id: wry::WebViewId, request: wry::http::Request<Vec<u8>>| {
-        use std::borrow::Cow;
-        use wry::http::{Response, StatusCode};
-
-        let uri = request.uri();
-        let path = uri.path();
-
-        // Remove leading slash from path
-        let file_path = path.trim_start_matches('/');
-
-        // Try to resolve relative to current working directory
-        let full_path = std::path::PathBuf::from(file_path);
-        let absolute_path = if full_path.is_absolute() {
-            full_path
-        } else {
-            std::env::current_dir()
-                .unwrap_or_default()
-                .join(full_path)
-        };
-
-        match std::fs::read(&absolute_path) {
-            Ok(content) => {
-                let mime_type = match absolute_path.extension().and_then(|e| e.to_str()) {
-                    Some("html") | Some("htm") => "text/html",
-                    Some("css") => "text/css",
-                    Some("js") | Some("mjs") => "application/javascript",
-                    Some("json") => "application/json",
-                    Some("png") => "image/png",
-                    Some("jpg") | Some("jpeg") => "image/jpeg",
-                    Some("gif") => "image/gif",
-                    Some("svg") => "image/svg+xml",
-                    Some("webp") => "image/webp",
-                    Some("woff") => "font/woff",
-                    Some("woff2") => "font/woff2",
-                    Some("ttf") => "font/ttf",
-                    Some("otf") => "font/otf",
-                    Some("ico") => "image/x-icon",
-                    Some("txt") => "text/plain",
-                    Some("xml") => "application/xml",
-                    Some("pdf") => "application/pdf",
-                    _ => "application/octet-stream",
-                };
-
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", mime_type)
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(Cow::Owned(content))
-                    .unwrap_or_else(|_| Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Cow::Borrowed(b"Internal server error" as &[u8]))
-                        .unwrap())
-            }
-            Err(_) => {
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .header("Content-Type", "text/plain")
-                    .body(Cow::Owned(format!("File not found: {}", absolute_path.display()).into_bytes()))
-                    .unwrap_or_else(|_| Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Cow::Borrowed(b"Not found" as &[u8]))
-                        .unwrap())
-            }
-        }
-    };
-
     // Build WebView with IPC support
     // On Linux, use build_gtk for proper Wayland support
     #[cfg(target_os = "linux")]
@@ -503,7 +529,7 @@ pub fn create_window_in_loop(
 
         WebViewBuilder::new()
             .with_ipc_handler(ipc_handler)
-            .with_custom_protocol("app".to_string(), app_protocol_handler)
+            .with_custom_protocol("app".to_string(), move |_id, req| serve_app_protocol(req))
             .with_background_color((255, 255, 255, 255))
             .with_initialization_script(&init_script)
             .with_devtools(options.open_devtools.unwrap_or(true))
@@ -513,54 +539,9 @@ pub fn create_window_in_loop(
 
     #[cfg(not(target_os = "linux"))]
     let webview = {
-        // Custom protocol handler for app:// URLs (same as Linux version)
-        let app_protocol_handler_non_linux = |_webview_id: wry::WebViewId, request: wry::http::Request<Vec<u8>>| {
-            use std::borrow::Cow;
-            use wry::http::{Response, StatusCode};
-
-            let uri = request.uri();
-            let path = uri.path();
-            let file_path = path.trim_start_matches('/');
-            let full_path = std::path::PathBuf::from(file_path);
-            let absolute_path = if full_path.is_absolute() {
-                full_path
-            } else {
-                std::env::current_dir().unwrap_or_default().join(full_path)
-            };
-
-            match std::fs::read(&absolute_path) {
-                Ok(content) => {
-                    let mime_type = match absolute_path.extension().and_then(|e| e.to_str()) {
-                        Some("html") | Some("htm") => "text/html",
-                        Some("css") => "text/css",
-                        Some("js") | Some("mjs") => "application/javascript",
-                        Some("json") => "application/json",
-                        Some("png") => "image/png",
-                        Some("jpg") | Some("jpeg") => "image/jpeg",
-                        Some("gif") => "image/gif",
-                        Some("svg") => "image/svg+xml",
-                        _ => "application/octet-stream",
-                    };
-                    Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", mime_type)
-                        .header("Access-Control-Allow-Origin", "*")
-                        .body(Cow::Owned(content))
-                        .unwrap_or_else(|_| Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Cow::Borrowed(b"Error" as &[u8]))
-                            .unwrap())
-                }
-                Err(_) => Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Cow::Borrowed(b"Not found" as &[u8]))
-                    .unwrap(),
-            }
-        };
-
         WebViewBuilder::new()
             .with_ipc_handler(ipc_handler)
-            .with_custom_protocol("app".to_string(), app_protocol_handler_non_linux)
+            .with_custom_protocol("app".to_string(), move |_id, req| serve_app_protocol(req))
             .with_background_color((255, 255, 255, 255))
             .with_initialization_script(&init_script)
             .with_devtools(options.open_devtools.unwrap_or(true))

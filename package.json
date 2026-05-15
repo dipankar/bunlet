@@ -15,6 +15,8 @@
     "build:packages": "cd packages/bunlet && bun run build && cd ../bunlet-cli && bun run build",
     "dev": "bun run ./packages/bunlet-cli/src/cli.ts",
     "test": "bun test packages/",
+    "typecheck": "(cd packages/bunlet && bun run typecheck) && (cd packages/bunlet-cli && bun run typecheck)",
+    "lint": "bunx oxlint --quiet packages/*/src/",
     "doctor": "bun run scripts/doctor.ts",
     "clean": "rm -rf packages/*/dist packages/*/*.node examples/*/*.bunlet-preload.js",
     "version:bump": "bun run scripts/bump-version.ts",

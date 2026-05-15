@@ -7,10 +7,36 @@ import { z, ZodType } from 'zod';
 import type { NativeWindowEvent } from './windows/events';
 import type { PathName, IPCContext, BunletEvent } from './types';
 import { createCloseEvent } from './windows/events';
+import { BunletError, BunletErrorCode } from './errors';
 import * as os from 'os';
 import * as path from 'path';
+import * as fs from 'fs';
 import { native } from './runtime';
 import { windowManager } from './windows/manager';
+
+function resolveAppVersion(): string {
+  if (process.env.BUNLET_APP_VERSION) {
+    return process.env.BUNLET_APP_VERSION;
+  }
+
+  const candidates = [
+    path.join(process.cwd(), 'package.json'),
+    path.join(path.dirname(process.execPath), 'package.json'),
+  ];
+
+  for (const pkgPath of candidates) {
+    try {
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version?: string };
+        if (pkg.version) return pkg.version;
+      }
+    } catch {
+      // skip unreadable package.json
+    }
+  }
+
+  return '0.0.0';
+}
 
 /**
  * IPC handler function type
@@ -39,7 +65,7 @@ class App extends EventEmitter {
   private isAppReady = false;
   private handlers: Map<string, StoredHandler> = new Map();
   private appName = 'Bunlet';
-  private appVersion = '0.1.0';
+  private appVersion = resolveAppVersion();
 
   private constructor() {
     super();
@@ -174,6 +200,7 @@ class App extends EventEmitter {
         this.sendIpcResponse(windowId, id, null, {
           code: -32601,
           message: `Method not found: ${method}`,
+          data: { bunletCode: BunletErrorCode.IPC_METHOD_NOT_FOUND },
         });
         return;
       }
@@ -188,6 +215,7 @@ class App extends EventEmitter {
           this.sendIpcResponse(windowId, id, null, {
             code: -32000,
             message: `Window not found: ${windowId}`,
+            data: { bunletCode: BunletErrorCode.WINDOW_NOT_FOUND },
           });
           return;
         }
@@ -206,7 +234,7 @@ class App extends EventEmitter {
           this.sendIpcResponse(windowId, id, null, {
             code: -32602,
             message: 'Invalid params',
-            data: error.errors,
+            data: { bunletCode: BunletErrorCode.IPC_VALIDATION_FAILED, issues: error.errors },
           });
         } else {
           // Handler error
@@ -214,6 +242,7 @@ class App extends EventEmitter {
           this.sendIpcResponse(windowId, id, null, {
             code: -32000,
             message: err.message || 'Unknown error',
+            data: { bunletCode: BunletErrorCode.UNKNOWN },
           });
         }
       }

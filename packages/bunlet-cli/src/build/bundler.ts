@@ -97,7 +97,7 @@ export async function bundleMain(
   root: string,
   mainEntry: string,
   outDir: string,
-  options: { minify: boolean; sourcemap: boolean | 'inline' | 'external' }
+  options: { minify: boolean; sourcemap: boolean | 'inline' | 'external'; define?: Record<string, string> }
 ): Promise<BundleResult> {
   const entrypoint = path.resolve(root, mainEntry);
 
@@ -117,6 +117,7 @@ export async function bundleMain(
     sourcemap: options.sourcemap,
     target: 'bun',
     external: ['@bunlet/native'],
+    define: options.define,
   });
 }
 

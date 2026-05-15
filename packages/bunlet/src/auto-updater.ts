@@ -20,7 +20,7 @@ import type {
 } from './updater/types';
 import { GitHubProvider } from './updater/providers/github';
 import { GenericProvider } from './updater/providers/generic';
-import { BaseProvider } from './updater/providers/base';
+import { compareVersions } from './updater/providers/base';
 
 function shellQuote(str: string): string {
   return `'${str.replace(/'/g, "'\\''")}'`;
@@ -102,7 +102,7 @@ export class AutoUpdater extends EventEmitter {
         }
       }
 
-      const comparison = versionComparer.compareVersions(updateInfo.version, this.currentVersion);
+      const comparison = compareVersions(updateInfo.version, this.currentVersion);
       const isAvailable = comparison > 0 || (this.allowDowngrade && comparison < 0);
 
       if (isAvailable) {
@@ -259,18 +259,24 @@ export class AutoUpdater extends EventEmitter {
   }
 
   private getCurrentVersion(): string {
-    try {
-      const packagePath = path.join(process.cwd(), 'package.json');
-      if (fs.existsSync(packagePath)) {
-        const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
-        return pkg.version || '0.0.0';
-      }
-    } catch {
-      // Ignore
+    if (process.env.BUNLET_APP_VERSION) {
+      return process.env.BUNLET_APP_VERSION;
     }
 
-    if (process.env.npm_package_version) {
-      return process.env.npm_package_version;
+    const candidates = [
+      path.join(process.cwd(), 'package.json'),
+      path.join(path.dirname(process.execPath), 'package.json'),
+    ];
+
+    for (const pkgPath of candidates) {
+      try {
+        if (fs.existsSync(pkgPath)) {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version?: string };
+          if (pkg.version) return pkg.version;
+        }
+      } catch {
+        // skip unreadable
+      }
     }
 
     return '0.0.0';
@@ -319,10 +325,6 @@ export class AutoUpdater extends EventEmitter {
     this.installStrategies.set('darwin', new DarwinInstallStrategy(this.updateDir));
     this.installStrategies.set('win32', new WindowsInstallStrategy());
     this.installStrategies.set('linux', new LinuxInstallStrategy());
-  }
-
-  private compareVersions(a: string, b: string): number {
-    return versionComparer.compareVersions(a, b);
   }
 
   private evaluateRollout(policy: StagedRolloutPolicy, info: UpdateInfo): RolloutCheckResult {
@@ -604,10 +606,3 @@ export class LinuxInstallStrategy implements InstallStrategy {
 }
 
 export const autoUpdater = new AutoUpdater();
-
-class VersionComparer extends BaseProvider {
-  constructor() { super(); }
-  async getLatestVersion() { return null; }
-  getDownloadUrl() { return ''; }
-}
-const versionComparer = new VersionComparer();

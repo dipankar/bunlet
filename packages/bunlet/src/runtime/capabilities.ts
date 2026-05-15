@@ -1,3 +1,4 @@
+import { BunletError, BunletErrorCode } from '../errors';
 import type { RuntimeBackend, RuntimeCapabilities } from './types';
 
 export type RuntimeCapabilityName = keyof RuntimeCapabilities;
@@ -34,7 +35,10 @@ export function assertCapability(
     return;
   }
 
-  throw new Error(createCapabilityErrorMessage(backend.engine, capability, apiName));
+  throw new BunletError(
+    BunletErrorCode.CAPABILITY_MISSING,
+    createCapabilityErrorMessage(backend.engine, capability, apiName),
+  );
 }
 
 export function hasRuntimeCapability(capability: RuntimeCapabilityName): boolean {

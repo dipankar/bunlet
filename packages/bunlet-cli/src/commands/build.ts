@@ -75,11 +75,14 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   const startTime = Date.now();
   const sourcemapFiles: string[] = [];
 
+  const appVersion = config.package?.version || '1.0.0';
+
   // 1. Bundle main process
   console.log('  [1/6] Bundling main process...');
   const mainResult = await bundleMain(root, mainEntry, outDir, {
     minify: options.minify,
     sourcemap,
+    define: { 'process.env.BUNLET_APP_VERSION': JSON.stringify(appVersion) },
   });
 
   if (!mainResult.success) {
@@ -143,7 +146,6 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   // 5. Generate package.json
   console.log('  [5/6] Generating package.json...');
   const appName = config.package?.name || path.basename(root);
-  const appVersion = config.package?.version || '1.0.0';
 
   generatePackageJson(outDir, {
     name: appName,

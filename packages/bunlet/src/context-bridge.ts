@@ -20,6 +20,8 @@
  * ```
  */
 
+import { BunletError, BunletErrorCode } from './errors';
+
 /**
  * Context bridge API for exposing objects to the renderer
  */
@@ -46,10 +48,12 @@ export const contextBridge = {
       // Use native context bridge if available
       bridge.exposeInMainWorld(apiKey, api);
     } else {
-      // Fallback: directly expose on window (less secure but functional)
-      // Deep clone the API to prevent prototype pollution
-      const exposedApi = deepCloneWithFunctions(api);
-      (window as unknown as Record<string, unknown>)[apiKey] = exposedApi;
+      throw new BunletError(
+        BunletErrorCode.CONTEXT_BRIDGE_UNAVAILABLE,
+        'contextBridge.exposeInMainWorld: native context bridge is not available. ' +
+        'Context isolation cannot be guaranteed. Ensure the window was created with contextIsolation enabled ' +
+        'and the preload script is running in the correct context.'
+      );
     }
   },
 };
@@ -59,41 +63,6 @@ export const contextBridge = {
  */
 interface ContextBridgeInternal {
   exposeInMainWorld(apiKey: string, api: Record<string, unknown>): void;
-}
-
-/**
- * Deep clone an object while preserving functions
- */
-function deepCloneWithFunctions(obj: unknown): unknown {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (typeof obj === 'function') {
-    // Wrap function to prevent access to internal scope
-    return function wrappedFunction(...args: unknown[]) {
-      return (obj as (...args: unknown[]) => unknown).apply(null, args);
-    };
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(deepCloneWithFunctions);
-  }
-
-  const cloned: Record<string, unknown> = {};
-  for (const key of Object.keys(obj)) {
-    const value = (obj as Record<string, unknown>)[key];
-    if (typeof value === 'function') {
-      // Wrap functions
-      cloned[key] = function wrappedFunction(...args: unknown[]) {
-        return (value as (...args: unknown[]) => unknown).apply(null, args);
-      };
-    } else {
-      cloned[key] = deepCloneWithFunctions(value);
-    }
-  }
-
-  return cloned;
 }
 
 /**

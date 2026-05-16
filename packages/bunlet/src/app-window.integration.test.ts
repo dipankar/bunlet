@@ -24,120 +24,106 @@ function createRuntimeState() {
 
 const runtimeState = createRuntimeState();
 
-const mockNative = {
-  initApp() {},
-  quitApp() {},
-  setIpcHandler(callback: IpcCallback) {
-    runtimeState.ipcHandler = callback;
-  },
-  setAppEventHandler(callback: AppEventCallback) {
-    runtimeState.appEventHandler = callback;
-  },
-  createWindow() {
-    const id = runtimeState.nextWindowId++;
-    runtimeState.boundsByWindowId.set(id, { x: 0, y: 0, width: 800, height: 600 });
-    return id;
-  },
-  closeWindow(windowId: number) {
-    runtimeState.closeWindowCalls.push(windowId);
-    runtimeState.boundsByWindowId.delete(windowId);
-  },
-  loadUrl(windowId: number, url: string) {
-    runtimeState.loadUrlCalls.push({ windowId, url });
-  },
-  loadFile() {},
-  showWindow() {},
-  hideWindow() {},
-  focusWindow(windowId: number) {
-    runtimeState.focusedWindowId = windowId;
-  },
-  maximizeWindow() {},
-  minimizeWindow() {},
-  restoreWindow() {},
-  setFullscreen() {},
-  getWindowBounds(windowId: number) {
-    return runtimeState.boundsByWindowId.get(windowId) ?? {
-      x: 0,
-      y: 0,
-      width: 800,
-      height: 600,
-    };
-  },
-  setWindowBounds(
-    windowId: number,
-    x: number | null,
-    y: number | null,
-    width: number | null,
-    height: number | null
-  ) {
-    const current = runtimeState.boundsByWindowId.get(windowId) ?? {
-      x: 0,
-      y: 0,
-      width: 800,
-      height: 600,
-    };
-    runtimeState.boundsByWindowId.set(windowId, {
-      x: x ?? current.x,
-      y: y ?? current.y,
-      width: width ?? current.width,
-      height: height ?? current.height,
-    });
-  },
-  setWindowTitle() {},
-  setWindowAlwaysOnTop() {},
-  isWindowVisible() {
-    return true;
-  },
-  isWindowFocused(windowId: number) {
-    return runtimeState.focusedWindowId === windowId;
-  },
-  isWindowMaximized() {
-    return false;
-  },
-  isWindowMinimized() {
-    return false;
-  },
-  isWindowFullscreen() {
-    return false;
-  },
-  getFocusedWindowId() {
-    return runtimeState.focusedWindowId;
-  },
-  sendIpcMessage() {},
-  executeJavaScript: async () => '',
-  openDevtools() {},
-  closeDevtools() {},
-  toggleDevtools() {},
-  isDevtoolsOpen() {
-    return false;
-  },
-  webviewReload() {},
-  webviewStop() {},
-  webviewGoBack() {},
-  webviewGoForward() {},
-  getCookies: async () => [],
-  setCookie() {},
-  removeCookie() {},
-  clearStorageData() {},
-  getUserAgent: async () => 'bunlet-test',
-};
-
 mock.module('./runtime', () => ({
   assertRuntimeCapability() {},
-  native: mockNative,
+  native: {
+    initApp() {},
+    quitApp() {},
+    setIpcHandler(callback: IpcCallback) {
+      runtimeState.ipcHandler = callback;
+    },
+    setAppEventHandler(callback: AppEventCallback) {
+      runtimeState.appEventHandler = callback;
+    },
+    createWindow() {
+      const id = runtimeState.nextWindowId++;
+      runtimeState.boundsByWindowId.set(id, { x: 0, y: 0, width: 800, height: 600 });
+      return id;
+    },
+    closeWindow(windowId: number) {
+      runtimeState.closeWindowCalls.push(windowId);
+      runtimeState.boundsByWindowId.delete(windowId);
+    },
+    loadUrl(windowId: number, url: string) {
+      runtimeState.loadUrlCalls.push({ windowId, url });
+    },
+    loadFile() {},
+    showWindow() {},
+    hideWindow() {},
+    focusWindow(windowId: number) {
+      runtimeState.focusedWindowId = windowId;
+    },
+    maximizeWindow() {},
+    minimizeWindow() {},
+    restoreWindow() {},
+    setFullscreen() {},
+    getWindowBounds(windowId: number) {
+      return runtimeState.boundsByWindowId.get(windowId) ?? {
+        x: 0,
+        y: 0,
+        width: 800,
+        height: 600,
+      };
+    },
+    setWindowBounds(
+      windowId: number,
+      x: number | null,
+      y: number | null,
+      width: number | null,
+      height: number | null
+    ) {
+      const current = runtimeState.boundsByWindowId.get(windowId) ?? {
+        x: 0,
+        y: 0,
+        width: 800,
+        height: 600,
+      };
+      runtimeState.boundsByWindowId.set(windowId, {
+        x: x ?? current.x,
+        y: y ?? current.y,
+        width: width ?? current.width,
+        height: height ?? current.height,
+      });
+    },
+    setWindowTitle() {},
+    setWindowAlwaysOnTop() {},
+    isWindowVisible() {
+      return true;
+    },
+    isWindowFocused(windowId: number) {
+      return runtimeState.focusedWindowId === windowId;
+    },
+    isWindowMaximized() {
+      return false;
+    },
+    isWindowMinimized() {
+      return false;
+    },
+    isWindowFullscreen() {
+      return false;
+    },
+    getFocusedWindowId() {
+      return runtimeState.focusedWindowId;
+    },
+    sendIpcMessage() {},
+    executeJavaScript: async () => '',
+    openDevtools() {},
+    closeDevtools() {},
+    toggleDevtools() {},
+    isDevtoolsOpen() {
+      return false;
+    },
+    webviewReload() {},
+    webviewStop() {},
+    webviewGoBack() {},
+    webviewGoForward() {},
+    getCookies: async () => [],
+    setCookie() {},
+    removeCookie() {},
+    clearStorageData() {},
+    getUserAgent: async () => 'bunlet-test',
+  },
 }));
-
-// Fallback: if another test file already loaded ./browser-window or ./app,
-// those modules cached the real native object. Mutate the real object so
-// already-cached modules still see our mocks.
-const realNative = require('./runtime').native as Record<string, unknown>;
-for (const [key, value] of Object.entries(mockNative)) {
-  try {
-    realNative[key] = value;
-  } catch {
-    // Some native properties may be non-writable; skip those.
-  }
-}
 
 const { app } = await import('./app');
 const { BrowserWindow } = await import('./browser-window');
@@ -168,25 +154,21 @@ describe('app and BrowserWindow integration', () => {
     win.on('did-navigate', (url) => seen.push(String(url)));
     win.on('page-title-updated', (title) => seen.push(`title:${String(title)}`));
 
-    runtimeState.ipcHandler?.({
-      windowId: win.id,
-      message: JSON.stringify({
-        type: '__bunlet_internal_window_event',
-        event: 'web-contents-navigation',
-        title: 'Docs',
-        url: 'https://example.com/docs',
-      }),
-    });
+    // Invoke the app's internal IPC routing directly so the test does not
+    // depend on which mock file initialised the App singleton first.
+    (app as any).handleIpcMessage(win.id, JSON.stringify({
+      type: '__bunlet_internal_window_event',
+      event: 'web-contents-navigation',
+      title: 'Docs',
+      url: 'https://example.com/docs',
+    }));
 
-    runtimeState.ipcHandler?.({
-      windowId: win.id,
-      message: JSON.stringify({
-        type: '__bunlet_internal_window_event',
-        event: 'web-contents-title-updated',
-        title: 'Updated Docs',
-        url: 'https://example.com/docs',
-      }),
-    });
+    (app as any).handleIpcMessage(win.id, JSON.stringify({
+      type: '__bunlet_internal_window_event',
+      event: 'web-contents-title-updated',
+      title: 'Updated Docs',
+      url: 'https://example.com/docs',
+    }));
 
     expect(win.getTitle()).toBe('Shell Title');
     expect(win.webContents.getTitle()).toBe('Updated Docs');
@@ -209,7 +191,7 @@ describe('app and BrowserWindow integration', () => {
       event.preventDefault();
     });
 
-    runtimeState.appEventHandler?.({
+    (app as any).handleNativeAppEvent({
       event: 'window-close-requested',
       windowId: win.id,
     });
@@ -228,7 +210,7 @@ describe('app and BrowserWindow integration', () => {
       closedEvents += 1;
     });
 
-    runtimeState.appEventHandler?.({
+    (app as any).handleNativeAppEvent({
       event: 'window-close-requested',
       windowId: win.id,
     });

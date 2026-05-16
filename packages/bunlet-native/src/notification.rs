@@ -22,11 +22,15 @@ static NOTIFICATION_CALLBACK: Lazy<
     Mutex<Option<ThreadsafeFunction<NotificationEvent, ErrorStrategy::Fatal>>>,
 > = Lazy::new(|| Mutex::new(None));
 
-/// Notification handle
+/// Notification handle (platform-specific)
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 struct NotificationHandle {
     #[allow(dead_code)]
     handle: Option<notify_rust::NotificationHandle>,
 }
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+struct NotificationHandle;
 
 /// Notification event types
 #[napi(object)]
@@ -161,6 +165,7 @@ pub fn show_notification(options: NotificationOptions) -> u32 {
     }
 
     // Show notification
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let handle = notification.show().ok();
 
     // Emit 'show' event
@@ -176,7 +181,10 @@ pub fn show_notification(options: NotificationOptions) -> u32 {
     }
 
     // Store handle
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let notification_handle = NotificationHandle { handle };
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let notification_handle = NotificationHandle;
     NOTIFICATIONS.lock().insert(id, notification_handle);
 
     id

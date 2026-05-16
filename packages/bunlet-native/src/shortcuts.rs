@@ -12,9 +12,17 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 
+/// Wrapper that forces `Send` because `GlobalHotKeyManager` contains raw
+/// pointers on Windows and the crate does not implement `Send` there.
+struct SendManager(GlobalHotKeyManager);
+
+// SAFETY: `GlobalHotKeyManager` is thread-safe in practice (it is designed
+// to be used across threads for registering/unregistering hotkeys).
+unsafe impl Send for SendManager {}
+
 /// Global hotkey manager state
 struct ShortcutState {
-    manager: Option<GlobalHotKeyManager>,
+    manager: Option<SendManager>,
     /// Map accelerator string to (HotKey, callback_id)
     registered: HashMap<String, (HotKey, u32)>,
     /// Callback to invoke when a shortcut is triggered
@@ -25,7 +33,7 @@ struct ShortcutState {
 
 static SHORTCUT_STATE: Lazy<Mutex<ShortcutState>> = Lazy::new(|| {
     Mutex::new(ShortcutState {
-        manager: GlobalHotKeyManager::new().ok(),
+        manager: GlobalHotKeyManager::new().ok().map(SendManager),
         registered: HashMap::new(),
         callback: None,
         next_id: 1,
@@ -193,7 +201,7 @@ pub fn register_shortcut(accelerator: String) -> u32 {
         return 0;
     };
 
-    if manager.register(hotkey).is_err() {
+    if manager.0.register(hotkey).is_err() {
         return 0;
     }
 
@@ -217,7 +225,7 @@ pub fn unregister_shortcut(accelerator: String) -> bool {
         return false;
     };
 
-    manager.unregister(hotkey).is_ok()
+    manager.0.unregister(hotkey).is_ok()
 }
 
 /// Unregister all global shortcuts
@@ -230,7 +238,7 @@ pub fn unregister_all_shortcuts() {
 
     if let Some(manager) = &state.manager {
         for hotkey in hotkeys {
-            let _ = manager.unregister(hotkey);
+            let _ = manager.0.unregister(hotkey);
         }
     }
 }

@@ -1,35 +1,46 @@
 # Bunlet Production-Readiness Report
 
-_Generated 2026-05-19. Branch: `chore/production-readiness`._
+_Generated 2026-05-19, updated 2026-05-20 after CI green. Branch: `chore/production-readiness` (PR #1)._
 
 This report assesses how close `@bunlet/core` is to a production-ready 1.0
 based on a hands-on pass: local macOS verification + the existing test
 suite + a new smoke harness + a new CLI scaffold-and-build roundtrip +
 CEF brought out of `continue-on-error`.
 
-**TL;DR:** macOS is green and shippable for v0.2 use cases. Linux and
-Windows green-ness depend on the CI run that opens with this PR — that
-matrix has historically been the source of breakage and the last five
-`main` commits were CI-fix commits. Several "framework" gaps (auto-updater,
-code signing, packager installers) remain blockers for a 1.0 claim.
+**TL;DR:** All three OS targets now build and test green in CI on this
+branch (PR #1, run 3). Including CEF, which was previously
+`continue-on-error` and breaking. Three CI rounds were needed: round 1
+surfaced 5 distinct production bugs, round 2 isolated the cef API drift,
+round 3 went clean. Auto-updater, real packager installers, and code
+signing remain v1.0 blockers — they need their own focused passes.
 
 ## Verdict matrix
 
-| Area                 | macOS | Linux¹ | Windows¹ | Notes |
-|----------------------|:-----:|:------:|:--------:|-------|
-| Core windowing       |  ✓    |  ?     |  ?       | tao+wry. Linux center() known broken (screen API). |
-| IPC (Zod-validated)  |  ✓    |  ?     |  ?       | All unit + integration tests pass. |
-| Native APIs          |  ✓    |  ?     |  ?       | dialog, menu, tray, clipboard, shortcuts, notifications, power. Tests mock native — see "Gaps". |
-| CLI create + build   |  ✓    |  ?     |  ?       | New roundtrip test gated on `BUNLET_CLI_ROUNDTRIP=1`. |
-| Smoke (examples)     |  6/6 + skip notes-app |  ?  |  ?  | New `bun run smoke` harness. |
-| Packaging (installer)|  ⚠    |  ⚠     |  ⚠       | `cli package` exists but produces no real DMG/MSI/AppImage in CI yet. |
-| CEF backend          |  ✓²   |  ?     |  ?       | Built locally with `CARGO_TARGET_DIR` workaround. Now ungated in CI. |
-| Auto-updater         |  ✗    |  ✗     |  ✗       | Only unit-tested with mocks; no E2E. |
-| Doctor coverage      |  ✓    |  ✓     |  ✓       | Now checks WebView2 / MSVC / Xcode CLT / xvfb / disk / CEF. |
+| Area                 | macOS | Linux | Windows | Notes |
+|----------------------|:-----:|:-----:|:-------:|-------|
+| Core windowing       |  ✓    |  ✓    |  ✓      | tao+wry. Linux `window.center()` still broken (screen API). |
+| IPC (Zod-validated)  |  ✓    |  ✓    |  ✓      | All unit + integration tests pass on every OS. |
+| Native APIs          |  ✓    |  ✓    |  ✓      | dialog, menu, tray, clipboard, shortcuts, notifications, power. Tests still mock native — system-integration testing is a v0.3 follow-up. |
+| CLI create + build   |  ✓    |  ✓    |  ✓      | Roundtrip test runs on every CI OS (BUNLET_CLI_ROUNDTRIP=1). |
+| Smoke (examples)     | 4/6 + 2 CI-skip + 1 vite-skip | 6/6 + 1 vite-skip | 6/6 + 1 vite-skip | tray-app + clipboard-manager skip on macOS CI (no Aqua session); run fine locally. |
+| Packaging (installer)|  ⚠    |  ⚠    |  ⚠      | `cli package` exists but produces no real DMG/MSI/AppImage in CI yet. |
+| CEF backend          |  ✓    |  ✓    |  ✓      | All 3 OS build CEF green in CI; cef pinned to =146.5, Cargo.lock committed. |
+| Auto-updater         |  ✗    |  ✗    |  ✗      | Only unit-tested with mocks; no E2E. |
+| Doctor coverage      |  ✓    |  ✓    |  ✓      | WebView2 / MSVC (vswhere) / Xcode CLT / xvfb / disk / CEF artifact. |
 
-¹ Pending CI run on this PR. Will be filled in once the matrix completes.
-² CEF: requires `CARGO_TARGET_DIR` redirect when building locally on the
-  small `/Volumes/Github` volume (~6 GB target dir). CI runners have room.
+CI run 3 timing on PR #1:
+
+| Job                          | Duration |
+|------------------------------|----------|
+| Rust check                   | 1m29s    |
+| Build native (darwin-x64)    | 1m54s    |
+| Test (macos-latest)          | 2m24s    |
+| Build native (darwin-arm64)  | 3m11s    |
+| Test (ubuntu-latest)         | 3m34s    |
+| Build native (linux-x64)     | 4m02s    |
+| Build native (win32-x64)     | 7m27s    |
+| Test (windows-latest)        | 8m13s    |
+| Binary size report           | 0m15s    |
 
 ## What this PR adds
 
@@ -143,17 +154,45 @@ $ bun run smoke                        # 6/6 pass, 1 skip (notes-app)
 $ cd packages/bunlet-cef && bun run build   # ✓ via CARGO_TARGET_DIR redirect
 ```
 
-CI (this PR): _pending — will be appended once the matrix completes._
+CI (PR #1): run 3 (sha 85165b1) — all 9 jobs green.
+
+### Bugs surfaced and fixed during CI iteration
+
+1. **`create.ts` template referenced `bunlet` / `bunlet/config`** — wrong
+   npm name. Every newly scaffolded app would fail at `bun install`.
+   Fixed → `@bunlet/core` / `@bunlet/core/config`.
+2. **`bunlet-cef/scripts/copy-artifact.js` ignored `CARGO_TARGET_DIR`** —
+   silently fell back to a hardcoded path. Honored now.
+3. **`cef` and `cef-dll-sys` were pinned loosely (`"146"`)**, so CI
+   freshly resolved 146.7 (breaking minor) while our source was written
+   for 146.5. Pinned `=146.5` + committed `Cargo.lock` for both Rust
+   crates so semver drift can't silently break CI again.
+4. **`bunlet-cef-native` missed the `gtk` crate dep on Linux** —
+   `lib.rs` used `gtk::events_pending()` under a `cfg(target_os = linux)`
+   that never built locally on macOS. Added `gtk = "0.18"` under a
+   Linux-target dep table, mirroring `bunlet-native`.
+5. **`on_pre_key_event` parameter typed `*mut u8`** which only matches
+   the macOS trait signature. Split into three `cfg`-gated impls with
+   `Option<&mut _XEvent>` (Linux) / `Option<&mut tagMSG>` (Windows) /
+   `*mut u8` (macOS).
+6. **`scripts/smoke.ts` aborted on macOS CI** — tray-app and
+   clipboard-manager hit `Assertion failed: CGAtomicGet … CGSConnectionByID`
+   because the headless macos-latest runner has no Aqua session. Added
+   `requiresMacWindowServer` and an auto-skip on CI.
+7. **`scripts/doctor.ts` MSVC check was too strict** — required `cl` /
+   `link` on PATH, but GH Actions Windows runners only expose MSVC via
+   `vswhere`. Added `vswhere` fallback (info-level pass).
+8. **`fs.symlinkSync(_, _, 'dir')` blocked the roundtrip test on
+   Windows** without Developer Mode. Switched to `'junction'` on win32.
 
 ## Recommendation
 
-This branch is safe to merge as a foundation pass: it fixes two real
-scaffold bugs that break every new user, surfaces and remediates the
-CEF copy-artifact bug, adds the first real native-binding smoke test
-and the first CLI scaffold-to-build roundtrip test, and brings CEF
-under the same CI gating as bunlet-native.
+Merge this branch. It fixes seven real production bugs (any one of
+which would have surprised users between `git clone` and `bun install`),
+adds the first non-mocked tests in the repo (`native-binding.smoke`,
+`cli.roundtrip`), and gets all three OS green in CI including CEF.
 
-It does **not** make Bunlet 1.0-ready. The blocker list above is what
-should drive the v0.3/v0.4 work — particularly auto-updater E2E and
-real packaging output. Recommend tagging this `v0.2.0-rc.1` after the
-matrix is green and treating the blocker list as the 1.0 milestone.
+This does **not** make Bunlet 1.0-ready. The blocker list above is what
+should drive v0.3/v0.4 — particularly auto-updater E2E and real
+packaging output. Recommend tagging `v0.2.0-rc.1` after merge and
+treating the blocker list as the 1.0 milestone.

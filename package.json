@@ -18,6 +18,7 @@
     "typecheck": "(cd packages/bunlet && bun run typecheck) && (cd packages/bunlet-cli && bun run typecheck)",
     "lint": "bunx oxlint --quiet packages/*/src/",
     "doctor": "bun run scripts/doctor.ts",
+    "smoke": "bun run scripts/smoke.ts",
     "clean": "rm -rf packages/*/dist packages/*/*.node examples/*/*.bunlet-preload.js",
     "version:bump": "bun run scripts/bump-version.ts",
     "version:changelog": "bun run scripts/generate-changelog.ts"

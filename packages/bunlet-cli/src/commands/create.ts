@@ -66,7 +66,7 @@ export async function createCommand(
       package: 'bunlet package',
     },
     dependencies: {
-      bunlet: `^${cliPkg.version}`,
+      '@bunlet/core': `^${cliPkg.version}`,
     },
     devDependencies: options.typescript
       ? {
@@ -256,7 +256,7 @@ app.run();
 
   // Create bunlet.config.ts
   const configContent = options.typescript
-    ? `import { defineConfig } from 'bunlet/config';
+    ? `import { defineConfig } from '@bunlet/core/config';
 
 export default defineConfig({
   main: './main.ts',

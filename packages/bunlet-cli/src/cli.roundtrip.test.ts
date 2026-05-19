@@ -38,9 +38,10 @@ d('cli roundtrip', () => {
       { target: path.join(MONOREPO_ROOT, 'packages', 'bunlet-native'), link: path.join(tmpRoot, 'node_modules', '@bunlet', 'native') },
       { target: path.join(MONOREPO_ROOT, 'packages', 'bunlet-cef'),    link: path.join(tmpRoot, 'node_modules', '@bunlet', 'cef') },
     ];
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
     for (const { target, link } of linkSpecs) {
       if (fs.existsSync(target) && !fs.existsSync(link)) {
-        fs.symlinkSync(target, link, 'dir');
+        fs.symlinkSync(target, link, linkType);
       }
     }
   });

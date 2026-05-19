@@ -32,18 +32,29 @@ const FATAL_PATTERNS = [
 interface ExampleSpec {
   name: string;
   requiresViteServer?: boolean;
+  /**
+   * Example pulls on macOS WindowServer (tray icons, clipboard,
+   * global shortcuts that hit CGSConnectionByID). GitHub Actions
+   * macos-latest runners have no Aqua session, so these abort with
+   * `Assertion failed: (CGAtomicGet(&is_initialized))` and exit 134.
+   * Skip them in CI; they're still exercised by a developer's local
+   * `bun run smoke`.
+   */
+  requiresMacWindowServer?: boolean;
   liveSeconds?: number;
 }
 
 const EXAMPLES: ExampleSpec[] = [
   { name: 'hello-world' },
   { name: 'multi-window' },
-  { name: 'tray-app' },
-  { name: 'clipboard-manager' },
+  { name: 'tray-app', requiresMacWindowServer: true },
+  { name: 'clipboard-manager', requiresMacWindowServer: true },
   { name: 'file-browser' },
   { name: 'power-monitor' },
   { name: 'notes-app', requiresViteServer: true },
 ];
+
+const HEADLESS_CI_DARWIN = process.platform === 'darwin' && process.env.CI === 'true';
 
 const LIVE_SECONDS_DEFAULT = 4;
 
@@ -72,6 +83,16 @@ async function runOne(spec: ExampleSpec): Promise<RunResult> {
       name: spec.name,
       status: 'skip',
       detail: 'requires renderer dev server (set BUNLET_SMOKE_FULL=1 to attempt)',
+      stdoutTail: '',
+      stderrTail: '',
+    };
+  }
+
+  if (spec.requiresMacWindowServer && HEADLESS_CI_DARWIN) {
+    return {
+      name: spec.name,
+      status: 'skip',
+      detail: 'headless macOS CI: no WindowServer for tray/clipboard',
       stdoutTail: '',
       stderrTail: '',
     };

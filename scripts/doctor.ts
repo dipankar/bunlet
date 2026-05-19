@@ -110,7 +110,18 @@ check('C/C++ build toolchain', () => {
     if (cl || link) {
       return { pass: true, detail: `MSVC toolchain found (${cl || link})` };
     }
-    return { pass: false, detail: 'MSVC toolchain not on PATH. Install Visual Studio Build Tools with C++ workload.' };
+    const vswhere = process.env['ProgramFiles(x86)']
+      ? path.join(process.env['ProgramFiles(x86)']!, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe')
+      : null;
+    if (vswhere && fs.existsSync(vswhere)) {
+      try {
+        const out = execSync(`"${vswhere}" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`, { encoding: 'utf-8' }).trim();
+        if (out) {
+          return { pass: true, detail: `MSVC via vswhere at ${out} (not on PATH; cargo finds it)`, level: 'info' };
+        }
+      } catch {}
+    }
+    return { pass: false, detail: 'MSVC toolchain not detected. Install Visual Studio Build Tools with C++ workload.' };
   }
   const cc = which('cc') || which('gcc') || which('clang');
   if (!cc) return { pass: false, detail: 'No C compiler on PATH. Install build-essential or clang.' };

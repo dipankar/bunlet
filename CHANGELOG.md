@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-05-20
+
+Republish release for v0.2.0. No code changes — only the release
+workflow's publish steps had to be fixed:
+
+### Fixed
+
+- **release(cargo):** add `--no-verify` to `cargo publish` for both
+  `bunlet-native` and `bunlet-cef-native`. The default verify-build
+  failed on Ubuntu without gtk/glib/webkit2gtk system deps. The
+  build-native matrix already verifies on real targets, so the
+  redundant Linux-only verify build was the only thing blocking
+  publish.
+- **release(npm):** switch from a long-lived `NPM_TOKEN` secret to
+  npm's OIDC trusted-publishing flow. Drops the `Configure npm
+  authentication` step; `npm publish --provenance` exchanges the
+  GitHub OIDC token for a scoped npm token automatically.
+  **Setup required**: per-package "Trusted Publisher" config on
+  npmjs.com pointing at `github.com/dipankar/bunlet` and
+  `.github/workflows/release.yml`.
+
 ## [0.2.0] - 2026-05-20
 
 The v1.0-blocker release. Closes the production-readiness gap list from

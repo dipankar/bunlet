@@ -1,6 +1,6 @@
 {
   "name": "@bunlet/native",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Rust native bindings for the Bunlet desktop framework — cross-platform WebView, window management, and OS APIs via NAPI-RS",
   "main": "index.js",
   "types": "index.d.ts",

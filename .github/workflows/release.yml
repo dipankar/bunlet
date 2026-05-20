@@ -150,22 +150,29 @@ jobs:
           cp cef-artifacts/bunlet-cef-*/*.node packages/bunlet-cef/ || true
           cp cef-artifacts/bunlet-cef-*/bunlet-cef-helper* packages/bunlet-cef/ || true
 
-      - name: Configure npm authentication
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Authentication is via npm's OIDC trusted publishing: each
+      # @bunlet/* package must have a Trusted Publisher configured on
+      # npmjs.com pointing at github.com/dipankar/bunlet and this
+      # workflow file. `npm publish` then exchanges the GitHub OIDC
+      # token for a scoped npm token automatically — no long-lived
+      # NPM_TOKEN secret needed.
+      - name: Set up Node for npm OIDC (>=11.5.1)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Publish @bunlet/native
-        run: cd packages/bunlet-native && npm publish --provenance
+        run: cd packages/bunlet-native && npm publish --provenance --access public
 
       - name: Publish @bunlet/cef
-        run: cd packages/bunlet-cef && npm publish --provenance
+        run: cd packages/bunlet-cef && npm publish --provenance --access public
 
       - name: Publish @bunlet/core
-        run: cd packages/bunlet && npm publish --provenance
+        run: cd packages/bunlet && npm publish --provenance --access public
 
       - name: Publish @bunlet/cli
-        run: cd packages/bunlet-cli && npm publish --provenance
+        run: cd packages/bunlet-cli && npm publish --provenance --access public
 
   publish-cargo:
     name: Publish to crates.io
@@ -192,11 +199,15 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
+      # `cargo publish` defaults to a verify-build that needs every system dep
+      # the cdylib does (gtk/glib/webkit2gtk on Linux). The artifacts are
+      # already verified by the build-native matrix on real targets, so use
+      # --no-verify here to skip the redundant Linux-only build.
       - name: Publish bunlet-native
         run: |
           VERSION=$(grep -m1 '^version' packages/bunlet-native/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           if ! cargo search bunlet-native --limit 1 2>/dev/null | grep -q "^bunlet-native = \"$VERSION\""; then
-            cargo publish --manifest-path packages/bunlet-native/Cargo.toml
+            cargo publish --no-verify --manifest-path packages/bunlet-native/Cargo.toml
           else
             echo "bunlet-native v$VERSION already published, skipping"
           fi
@@ -207,7 +218,7 @@ jobs:
         run: |
           VERSION=$(grep -m1 '^version' packages/bunlet-cef-native/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           if ! cargo search bunlet-cef-native --limit 1 2>/dev/null | grep -q "^bunlet-cef-native = \"$VERSION\""; then
-            cargo publish --manifest-path packages/bunlet-cef-native/Cargo.toml
+            cargo publish --no-verify --manifest-path packages/bunlet-cef-native/Cargo.toml
           else
             echo "bunlet-cef-native v$VERSION already published, skipping"
           fi

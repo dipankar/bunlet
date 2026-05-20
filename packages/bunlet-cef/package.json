@@ -1,6 +1,6 @@
 {
   "name": "@bunlet/cef",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Chromium Embedded Framework (CEF) backend for Bunlet — full Chromium 146+ runtime as an alternative to system WebView",
   "main": "index.js",
   "types": "index.d.ts",

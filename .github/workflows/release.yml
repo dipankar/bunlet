@@ -157,20 +157,26 @@ jobs:
       # token for a scoped npm token automatically — no long-lived
       # NPM_TOKEN secret needed.
       #
-      # npm OIDC trusted publishing requires npm >= 11.5.1. Node 22 LTS
-      # ships npm 10.x which can sign provenance but cannot do the OIDC
-      # token exchange — symptom is a confusing `E404` after a
-      # successful sigstore attestation. Upgrade explicitly.
-      - name: Set up Node for npm OIDC (>=11.5.1)
+      # npm OIDC trusted publishing requires npm >= 11.5.1. Node 24 LTS
+      # ships npm 11.x natively. Earlier Nodes ship npm 10.x which can
+      # sign provenance but cannot do the OIDC token exchange — symptom
+      # is a confusing 404 from the registry after a successful sigstore
+      # attestation.
+      - name: Set up Node 24 LTS (npm >= 11.5.1)
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Upgrade npm to support OIDC trusted publishing
+      - name: Verify npm supports OIDC trusted publishing
         run: |
-          npm install -g npm@latest
-          npm --version
+          NPM_VERSION=$(npm --version)
+          echo "npm version: $NPM_VERSION"
+          NPM_MAJOR=$(echo "$NPM_VERSION" | cut -d. -f1)
+          if [ "$NPM_MAJOR" -lt 11 ]; then
+            echo "::error::npm $NPM_VERSION is too old for OIDC trusted publishing (need >= 11.5.1)"
+            exit 1
+          fi
 
       - name: Publish @bunlet/native
         run: cd packages/bunlet-native && npm publish --provenance --access public

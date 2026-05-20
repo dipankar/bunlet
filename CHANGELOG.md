@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-05-20
+
+Third republish for the v0.2 line. v0.2.2's `npm install -g npm@latest`
+step hit a known npm self-upgrade bug on Node 22 (`Cannot find module
+'promise-retry'`) where the upgrade leaves the install in a broken
+state.
+
+### Fixed
+
+- **release(npm):** switch the publish job to Node 24 LTS (ships with
+  npm 11.x natively) instead of running an in-place self-upgrade from
+  npm 10 → latest. Added a guard step that fails loudly if npm major
+  version is < 11.
+
 ## [0.2.2] - 2026-05-20
 
 Second republish for the v0.2 line. v0.2.1's npm publish failed

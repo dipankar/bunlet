@@ -122,7 +122,7 @@ checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
 name = "bunlet-cef-native"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cef",
  "cef-dll-sys",

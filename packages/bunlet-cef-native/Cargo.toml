@@ -1,6 +1,6 @@
 [package]
 name = "bunlet-cef-native"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Native CEF (Chromium Embedded Framework) bindings using NAPI-RS — full Chromium 146+ backend for the Bunlet desktop framework"
 readme = "README.md"

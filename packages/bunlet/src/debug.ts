@@ -2,7 +2,7 @@
  * Debug logging system with namespace filtering.
  *
  * Usage:
- *   import { createLogger } from 'bunlet/debug';
+ *   import { createLogger } from '@bunlet/core/debug';
  *   const log = createLogger('ipc');
  *   log.info('Handler registered', { channel });
  *   log.warn('Slow response', { elapsed: 1200 });

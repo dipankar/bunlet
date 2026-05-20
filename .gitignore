@@ -15,7 +15,9 @@ examples/*/test-dist/
 packages/bunlet-native/target/
 packages/bunlet-cef-native/target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock is committed for cdylib reproducibility — do NOT re-add the
+# blanket ignore. CEF/cef-dll-sys minor versions have shipped breaking
+# API changes; without a lock CI silently picks newer ones and breaks.
 
 # Release artifacts
 release/
@@ -88,3 +90,4 @@ temp/
 
 # Debug files
 *.dSYM/
+tmp-roundtrip-*

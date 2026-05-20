@@ -24,8 +24,11 @@ napi = { version = "2", default-features = false, features = ["async", "serde-js
 napi-derive = "2"
 
 # CEF (Chromium Embedded Framework) bindings from Tauri team
-cef = "146"
-cef-dll-sys = "146"
+# Pinned to =146.5 — 146.6+ broke on_pre_key_event signature
+# (`*mut u8` became `Option<&mut _XEvent>`); update both pin and the
+# `on_pre_key_event` impl together when bumping.
+cef = "=146.5"
+cef-dll-sys = "=146.5"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -46,6 +49,9 @@ send_wrapper = "0.6"
 
 # Logging
 log = "0.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
 
 [build-dependencies]
 napi-build = "2"

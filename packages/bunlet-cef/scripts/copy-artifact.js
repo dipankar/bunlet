@@ -49,18 +49,15 @@ if (!sourceName || !targetName || !helperName) {
   throw new Error(`Unsupported platform for CEF artifact copy: ${platformArch}`);
 }
 
-const targetDir = target
-  ? path.join('target', target, mode)
-  : path.join('target', mode);
+const cargoTargetDir = process.env.CARGO_TARGET_DIR
+  ? path.resolve(process.env.CARGO_TARGET_DIR)
+  : path.resolve(__dirname, '..', '..', 'bunlet-cef-native', 'target');
 
-const sourcePath = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  'bunlet-cef-native',
-  targetDir,
-  sourceName
-);
+const targetDir = target
+  ? path.join(cargoTargetDir, target, mode)
+  : path.join(cargoTargetDir, mode);
+
+const sourcePath = path.resolve(targetDir, sourceName);
 const targetPath = path.resolve(__dirname, '..', targetName);
 
 if (!fs.existsSync(sourcePath)) {
@@ -71,14 +68,7 @@ fs.copyFileSync(sourcePath, targetPath);
 console.log(`[bunlet-cef] Copied ${path.basename(sourcePath)} -> ${path.basename(targetPath)}`);
 
 // Copy the CEF helper binary alongside the .node file
-const helperSourcePath = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  'bunlet-cef-native',
-  targetDir,
-  helperName
-);
+const helperSourcePath = path.resolve(targetDir, helperName);
 const helperTargetPath = path.resolve(__dirname, '..', helperName);
 
 if (fs.existsSync(helperSourcePath)) {

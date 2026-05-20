@@ -260,11 +260,37 @@ wrap_keyboard_handler! {
     }
 
     impl KeyboardHandler {
+        // The cef trait's `os_event` type varies by platform — *mut u8 on
+        // macOS, Option<&mut _XEvent> on Linux, Option<&mut tagMSG> on
+        // Windows. Use cfg to keep all three buildable.
+        #[cfg(target_os = "macos")]
         fn on_pre_key_event(
             &self,
             _browser: Option<&mut Browser>,
             _event: Option<&KeyEvent>,
             _os_event: *mut u8,
+            _is_keyboard_shortcut: Option<&mut std::os::raw::c_int>,
+        ) -> std::os::raw::c_int {
+            0
+        }
+
+        #[cfg(target_os = "linux")]
+        fn on_pre_key_event(
+            &self,
+            _browser: Option<&mut Browser>,
+            _event: Option<&KeyEvent>,
+            _os_event: Option<&mut cef_dll_sys::_XEvent>,
+            _is_keyboard_shortcut: Option<&mut std::os::raw::c_int>,
+        ) -> std::os::raw::c_int {
+            0
+        }
+
+        #[cfg(target_os = "windows")]
+        fn on_pre_key_event(
+            &self,
+            _browser: Option<&mut Browser>,
+            _event: Option<&KeyEvent>,
+            _os_event: Option<&mut cef_dll_sys::tagMSG>,
             _is_keyboard_shortcut: Option<&mut std::os::raw::c_int>,
         ) -> std::os::raw::c_int {
             0

@@ -60,13 +60,28 @@ jobs:
       - name: Run tests
         if: matrix.os != 'ubuntu-latest'
         run: bun test
+        env:
+          BUNLET_CLI_ROUNDTRIP: '1'
 
       - name: Run tests (with virtual display)
         if: matrix.os == 'ubuntu-latest'
         run: xvfb-run bun test
+        env:
+          BUNLET_CLI_ROUNDTRIP: '1'
 
       - name: Run benchmark tests
         run: bun test packages/bunlet/src/benchmark.test.ts
+
+      - name: Smoke-test examples
+        if: matrix.os != 'ubuntu-latest'
+        run: bun run smoke
+
+      - name: Smoke-test examples (with virtual display)
+        if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run bun run smoke
+
+      - name: Run doctor (post-build, must report clean)
+        run: bun run doctor
 
   rust-check:
     name: Rust check
@@ -155,7 +170,6 @@ jobs:
           cd packages/bunlet-cef
           cargo build --manifest-path ../bunlet-cef-native/Cargo.toml --release --target ${{ matrix.rust-target }}
           bun run copy-artifact
-        continue-on-error: true
 
       - name: Upload bunlet-native artifacts
         uses: actions/upload-artifact@v4
@@ -164,7 +178,6 @@ jobs:
           path: packages/bunlet-native/*.node
 
       - name: Upload bunlet-cef artifacts
-        if: steps.build-cef.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: bunlet-cef-${{ matrix.platform }}

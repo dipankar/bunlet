@@ -19,6 +19,24 @@ export interface SignOptions {
   timestampServer?: string;
 }
 
+export interface NotarizeOptions {
+  /** Apple ID email. Falls back to APPLE_ID env. */
+  appleId?: string;
+  /** Apple Developer team ID. Falls back to APPLE_TEAM_ID env. */
+  teamId?: string;
+  /** App-specific password. Falls back to APPLE_APP_SPECIFIC_PASSWORD env. */
+  appSpecificPassword?: string;
+  /** If true, run `xcrun stapler staple` after submission succeeds. Default true. */
+  staple?: boolean;
+}
+
+export interface LinuxSignOptions {
+  /** GPG key id (long form or fingerprint) used for `gpg --local-user`. */
+  gpgKeyId: string;
+  /** Optional passphrase. If not provided, the user's gpg-agent must supply one. */
+  passphrase?: string;
+}
+
 export interface PackagerContext {
   name: string;
   version: string;

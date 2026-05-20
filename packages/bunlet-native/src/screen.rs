@@ -1,6 +1,20 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+#[cfg(target_os = "linux")]
+use once_cell::sync::OnceCell;
+#[cfg(target_os = "linux")]
+use parking_lot::Mutex;
+
+#[cfg(target_os = "linux")]
+static LINUX_PRIMARY_CACHE: OnceCell<DisplayInfo> = OnceCell::new();
+#[cfg(target_os = "linux")]
+static LINUX_ALL_CACHE: OnceCell<Vec<DisplayInfo>> = OnceCell::new();
+// Re-entry guard. GDK calls inside an already-running GTK loop can hang on
+// some compositors; cache calls return early once primed.
+#[cfg(target_os = "linux")]
+static LINUX_PRIMING_LOCK: Mutex<()> = Mutex::new(());
+
 /// Display/monitor information
 #[napi(object)]
 #[derive(Clone)]
@@ -31,12 +45,42 @@ pub struct DisplayInfo {
     pub is_primary: bool,
 }
 
+/// Prime the screen cache.
+///
+/// On Linux, calling into GDK from outside the main GTK loop (after the
+/// event loop is running) can hang on some compositors. To sidestep that,
+/// the JS layer calls this once from `app.whenReady()` so the cache is
+/// populated when GTK is still safely accessible. Subsequent
+/// `get_primary_display` / `get_all_displays` calls return the cached
+/// value. On other platforms this is a no-op.
+#[napi]
+pub fn prime_screen_cache() -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let _guard = LINUX_PRIMING_LOCK.lock();
+        if LINUX_PRIMARY_CACHE.get().is_none() {
+            let primary = get_primary_display_gdk()?;
+            let _ = LINUX_PRIMARY_CACHE.set(primary);
+        }
+        if LINUX_ALL_CACHE.get().is_none() {
+            let all = get_all_displays_gdk()?;
+            let _ = LINUX_ALL_CACHE.set(all);
+        }
+    }
+    Ok(())
+}
+
 /// Get the primary display
 #[napi]
 pub fn get_primary_display() -> Result<DisplayInfo> {
     #[cfg(target_os = "linux")]
     {
-        get_primary_display_gdk()
+        if let Some(cached) = LINUX_PRIMARY_CACHE.get() {
+            return Ok(cached.clone());
+        }
+        let primary = get_primary_display_gdk()?;
+        let _ = LINUX_PRIMARY_CACHE.set(primary.clone());
+        Ok(primary)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -50,7 +94,12 @@ pub fn get_primary_display() -> Result<DisplayInfo> {
 pub fn get_all_displays() -> Result<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
-        get_all_displays_gdk()
+        if let Some(cached) = LINUX_ALL_CACHE.get() {
+            return Ok(cached.clone());
+        }
+        let all = get_all_displays_gdk()?;
+        let _ = LINUX_ALL_CACHE.set(all.clone());
+        Ok(all)
     }
 
     #[cfg(not(target_os = "linux"))]

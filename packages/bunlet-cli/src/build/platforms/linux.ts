@@ -9,6 +9,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { generateDesktopFile, generateAppRun, type AppManifest } from '../manifest';
 import { generateIconsForPlatform } from '../icons';
+import type { LinuxSignOptions } from '../packager';
 
 export interface LinuxBuildOptions {
   name: string;
@@ -270,6 +271,54 @@ exec bun run "/opt/${appName}/main.js" "\$@"
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * Sign an AppImage with a detached GPG signature. Produces
+ * `<path>.AppImage.sig` alongside the original. Requires `gpg` on PATH
+ * and a configured signing key. Throws a descriptive error when `gpg`
+ * is missing or the key id is empty — does NOT silently skip.
+ *
+ * Usage:
+ *   await signAppImage('release/MyApp.AppImage', { gpgKeyId: 'ABC123' })
+ */
+export function signAppImage(appImagePath: string, options: LinuxSignOptions): void {
+  if (!options.gpgKeyId) {
+    throw new Error('[bunlet] signAppImage: gpgKeyId is required');
+  }
+  if (!fs.existsSync(appImagePath)) {
+    throw new Error(`[bunlet] signAppImage: file not found: ${appImagePath}`);
+  }
+  // Verify gpg is reachable before invoking — gives a clearer error than
+  // a non-zero exit from the shell.
+  try {
+    execSync('gpg --version', { stdio: 'ignore' });
+  } catch {
+    throw new Error('[bunlet] signAppImage: `gpg` not found on PATH. Install GnuPG and configure a signing key.');
+  }
+
+  const sigPath = `${appImagePath}.sig`;
+  if (fs.existsSync(sigPath)) {
+    fs.rmSync(sigPath);
+  }
+
+  const args = [
+    'gpg',
+    '--batch',
+    '--yes',
+    '--detach-sign',
+    '--armor',
+    '--local-user',
+    `"${options.gpgKeyId}"`,
+    '--output',
+    `"${sigPath}"`,
+  ];
+  if (options.passphrase) {
+    args.splice(1, 0, '--pinentry-mode', 'loopback', '--passphrase', `"${options.passphrase}"`);
+  }
+  args.push(`"${appImagePath}"`);
+
+  execSync(args.join(' '), { stdio: 'inherit' });
 }
 
 /**

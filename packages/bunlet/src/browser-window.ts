@@ -227,6 +227,7 @@ export class BrowserWindow extends EventEmitter {
     super();
     this.options = options;
     this.state = new BrowserWindowState(options.title ?? 'Bunlet');
+    this.state.setVisible(options.show ?? true);
     if (options.webPreferences?.partition || options.webPreferences?.session) {
       assertRuntimeCapability('sessionPartitions', 'BrowserWindow webPreferences.session/partition');
     }
@@ -417,27 +418,21 @@ export class BrowserWindow extends EventEmitter {
 
   // Visibility
 
-  /**
-   * Show the window
-   */
   show(): void {
     native.showWindow(this.id);
+    this.state.setVisible(true);
     this.emit('show');
   }
 
-  /**
-   * Hide the window
-   */
   hide(): void {
     native.hideWindow(this.id);
+    this.state.setVisible(false);
     this.emit('hide');
   }
 
-  /**
-   * Focus the window
-   */
   focus(): void {
     native.focusWindow(this.id);
+    this.state.setFocused(true);
   }
 
   /**
@@ -456,47 +451,31 @@ export class BrowserWindow extends EventEmitter {
   }
 
   // State checks
+  //
+  // These read from the cached BrowserWindowState. The cache is populated
+  // by native window events (focus/blur, minimize/maximize/restore,
+  // fullscreen, show/hide). For cold state (no events fired yet) the
+  // defaults reflect a newly-created window: visible=true (unless
+  // options.show was false), focused=false, every other state=false.
 
-  /**
-   * Check if window is visible
-   */
   isVisible(): boolean {
-    return native.isWindowVisible(this.id);
+    return this.state.isVisible();
   }
 
-  /**
-   * Check if window is focused
-   */
   isFocused(): boolean {
-    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
-    if (typeof nativeAny.isWindowFocused === 'function') {
-      return !!nativeAny.isWindowFocused(this.id);
-    }
-    throw new Error(
-      `[bunlet] BrowserWindow.isFocused() is not supported by the current backend. ` +
-      `Missing native implementation: isWindowFocused.`
-    );
+    return this.state.isFocused();
   }
 
-  /**
-   * Check if window is maximized
-   */
   isMaximized(): boolean {
-    return native.isWindowMaximized(this.id);
+    return this.state.isMaximized();
   }
 
-  /**
-   * Check if window is minimized
-   */
   isMinimized(): boolean {
-    return native.isWindowMinimized(this.id);
+    return this.state.isMinimized();
   }
 
-  /**
-   * Check if window is fullscreen
-   */
   isFullScreen(): boolean {
-    return native.isWindowFullscreen(this.id);
+    return this.state.isFullscreen();
   }
 
   /**
@@ -506,45 +485,39 @@ export class BrowserWindow extends EventEmitter {
     return this.state.isDestroyed();
   }
 
-  // Window controls
+  // Window controls. State is updated optimistically so subsequent
+  // is*() reads reflect the requested transition immediately. The
+  // native event that follows will reconfirm.
 
-  /**
-   * Maximize the window
-   */
   maximize(): void {
     native.maximizeWindow(this.id);
+    this.state.setMaximized(true);
+    this.state.setMinimized(false);
     this.emit('maximize');
   }
 
-  /**
-   * Exit maximized state
-   */
   unmaximize(): void {
     native.restoreWindow(this.id);
+    this.state.setMaximized(false);
     this.emit('unmaximize');
   }
 
-  /**
-   * Minimize the window
-   */
   minimize(): void {
     native.minimizeWindow(this.id);
+    this.state.setMinimized(true);
     this.emit('minimize');
   }
 
-  /**
-   * Restore from minimized/maximized
-   */
   restore(): void {
     native.restoreWindow(this.id);
+    this.state.setMinimized(false);
+    this.state.setMaximized(false);
     this.emit('restore');
   }
 
-  /**
-   * Set fullscreen state
-   */
   setFullScreen(flag: boolean): void {
     native.setFullscreen(this.id, flag);
+    this.state.setFullscreen(flag);
     if (flag) {
       this.emit('enter-full-screen');
     } else {
@@ -589,10 +562,22 @@ export class BrowserWindow extends EventEmitter {
   }
 
   /**
-   * Center window on screen
+   * Center window on screen. If display info isn't available yet (e.g.
+   * called on Linux before `app.whenReady()` resolves, or in a headless
+   * environment), the call no-ops with a console warning rather than
+   * throwing — centering is a best-effort hint, not a contract.
    */
   center(): void {
-    const display = screen.getPrimaryDisplay();
+    let display: ReturnType<typeof screen.getPrimaryDisplay>;
+    try {
+      display = screen.getPrimaryDisplay();
+    } catch (err) {
+      console.warn(
+        `[bunlet] BrowserWindow.center() skipped: ${(err as Error).message}. ` +
+          `Call after app.whenReady() resolves, or set explicit x/y in BrowserWindowOptions.`
+      );
+      return;
+    }
     const bounds = this.getBounds();
     const x = Math.round(display.bounds.x + (display.bounds.width - bounds.width) / 2);
     const y = Math.round(display.bounds.y + (display.bounds.height - bounds.height) / 2);
@@ -695,6 +680,11 @@ export class BrowserWindow extends EventEmitter {
         requestClose: () => this.requestClose(),
         markClosed: () => this.markClosed(),
         updateBounds: (bounds) => this.state.updateBounds(bounds),
+        setFocused: (v) => this.state.setFocused(v),
+        setMinimized: (v) => this.state.setMinimized(v),
+        setMaximized: (v) => this.state.setMaximized(v),
+        setFullscreen: (v) => this.state.setFullscreen(v),
+        setVisible: (v) => this.state.setVisible(v),
       },
       event
     );

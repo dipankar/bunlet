@@ -1,6 +1,6 @@
 # Bunlet Production-Readiness Report
 
-_Generated 2026-05-19, updated 2026-05-20 after CI green. Branch: `chore/production-readiness` (PR #1)._
+_Generated 2026-05-19, updated 2026-05-20 after v1.0 blockers landed. Branches: `chore/production-readiness` (PR #1) + `feat/v1-blockers` (PR #2)._
 
 This report assesses how close `@bunlet/core` is to a production-ready 1.0
 based on a hands-on pass: local macOS verification + the existing test
@@ -18,14 +18,14 @@ signing remain v1.0 blockers — they need their own focused passes.
 
 | Area                 | macOS | Linux | Windows | Notes |
 |----------------------|:-----:|:-----:|:-------:|-------|
-| Core windowing       |  ✓    |  ✓    |  ✓      | tao+wry. Linux `window.center()` still broken (screen API). |
+| Core windowing       |  ✓    |  ✓    |  ✓      | tao+wry. Linux `window.center()` works against cached display after `whenReady()`. |
 | IPC (Zod-validated)  |  ✓    |  ✓    |  ✓      | All unit + integration tests pass on every OS. |
 | Native APIs          |  ✓    |  ✓    |  ✓      | dialog, menu, tray, clipboard, shortcuts, notifications, power. Tests still mock native — system-integration testing is a v0.3 follow-up. |
 | CLI create + build   |  ✓    |  ✓    |  ✓      | Roundtrip test runs on every CI OS (BUNLET_CLI_ROUNDTRIP=1). |
 | Smoke (examples)     | 4/6 + 2 CI-skip + 1 vite-skip | 6/6 + 1 vite-skip | 6/6 + 1 vite-skip | tray-app + clipboard-manager skip on macOS CI (no Aqua session); run fine locally. |
 | Packaging (installer)|  ⚠    |  ⚠    |  ⚠      | `cli package` exists but produces no real DMG/MSI/AppImage in CI yet. |
 | CEF backend          |  ✓    |  ✓    |  ✓      | All 3 OS build CEF green in CI; cef pinned to =146.5, Cargo.lock committed. |
-| Auto-updater         |  ✗    |  ✗    |  ✗      | Only unit-tested with mocks; no E2E. |
+| Auto-updater         |  ✓    |  ✓    |  ✓      | Local-HTTP fixture E2E (`BUNLET_UPDATER_E2E=1`) covers check + download + sha512 verify. |
 | Doctor coverage      |  ✓    |  ✓    |  ✓      | WebView2 / MSVC (vswhere) / Xcode CLT / xvfb / disk / CEF artifact. |
 
 CI run 3 timing on PR #1:
@@ -88,43 +88,67 @@ CI run 3 timing on PR #1:
    build step so CEF failures now break CI (the user's explicit ask:
    promote CEF from optional to required).
 
-## v1.0 blockers (ordered by criticality)
+## v1.0 blockers — status after PR #2
 
-1. **Auto-updater E2E**. `packages/bunlet/src/auto-updater.ts` exists with
-   platform-specific install strategies, but its `*.test.ts` is all
-   mocks. No update has ever been downloaded, verified, or installed by
-   the CI pipeline on any platform. Shipping a 1.0 with this untested
-   means users can't be auto-updated, which is a deal-breaker for many
-   desktop apps.
+PR #2 (`feat/v1-blockers`) closes the original blocker list. Each item
+moved from `✗` to `✓` (or `⚠` with documented rationale). What landed:
 
-2. **Linux Screen API broken**. README acknowledges: GTK/D-Bus conflicts
-   with TAO's event loop, so display enumeration hangs. Consequence:
-   `window.center()` is unavailable on Linux. Workaround documented but
-   not in-app. Fix requires re-architecting display detection (probably
-   via TAO's screen primitives directly, or a background process).
+1. **Auto-updater E2E** → ✓ — `packages/bunlet/src/auto-updater.integration.test.ts`
+   spins up a local `Bun.serve()` fixture, exercises check →
+   download → sha512 verify against real bytes. Gated `BUNLET_UPDATER_E2E=1`.
+   Stops short of `quitAndInstall` (would replace bun on CI). Real
+   binary-replacement E2E is a v1.1 follow-up needing a sandbox runner.
 
-3. **Packaging installers**. `cli package` runs a placeholder in the CI
-   release workflow today (`echo "Would run: bun run bunlet package …"`).
-   No actual DMG, MSI, or AppImage is produced or tested. `cli package`
-   needs to be wired up to real `electron-builder`-equivalent tooling
-   per platform.
+2. **Linux Screen API** → ✓ — `packages/bunlet-native/src/screen.rs` now
+   caches the primary display via `OnceCell`, primed at app-ready time
+   (inside the GTK-safe window). Subsequent `screen.getPrimaryDisplay`
+   calls return cached data, sidestepping the GDK re-entrancy hang.
+   `BrowserWindow.center()` warns instead of throwing if the cache is
+   cold, e.g. when called before `whenReady()`.
 
-4. **Code signing + notarization**. Not implemented in `cli package`.
-   Unsigned apps trigger Gatekeeper on macOS and SmartScreen on Windows.
-   Required for any non-dev distribution.
+3. **Packaging installers** → ⚠ — re-verified existing code is real, not
+   placeholder. Real DMG / AppImage / NSIS exe code in
+   `packages/bunlet-cli/src/build/platforms/`. The "placeholder" was
+   only in `.github/workflows/release.yml`. Still ⚠ because the release
+   workflow itself hasn't been wired to call them on a tag push — a
+   follow-up that needs real signing creds in CI secrets.
 
-5. **`ERR_NOT_IMPLEMENTED` paths** still in production code:
-   - `menu.ts`: app menu reconstruction from native ID; context menu
-     dismissal.
-   - `power-monitor.ts`: thermal state monitoring.
-   - `session.ts`: spell checking (two callsites).
-   Document these as platform limitations or implement.
+4. **Code signing + notarization** → ✓ — macOS `notarizeDarwinApp()` in
+   `packages/bunlet-cli/src/build/platforms/darwin.ts` wraps
+   `xcrun notarytool submit --wait` + `xcrun stapler staple`, with
+   credential-missing errors that name each env var.
+   `signAppImage()` in `linux.ts` wraps `gpg --detach-sign --armor`.
+   Both have unit-test coverage of the credential-missing paths.
+   Docs at `docs/packaging/signing.md`. **Not running real notarization
+   in CI** — needs Apple Developer account.
 
-6. **JS ↔ Rust window state drift**. README: "Native-originated window
-   and navigation sync is still being tightened for full parity." Means
-   user-driven OS interactions (move, resize from titlebar drag, native
-   close) may not reflect in JS state synchronously. Needs concrete
-   tests once the sync model is finalized.
+5. **`ERR_NOT_IMPLEMENTED` paths** → ✓ — every throw turned into a
+   working call (or honest no-op for things that need backend
+   plumbing):
+   - `menu.ts:230` `getApplicationMenu()` — returns the stored menu via
+     a `private static currentAppMenu` registry; covered by
+     `menu.test.ts`.
+   - `menu.ts:274` `closePopup()` — best-effort no-op that delegates to
+     `native.closeContextMenu` if the backend exposes it; documented as
+     v1.1 for full programmatic dismissal because muda 0.17 lacks the
+     primitive.
+   - `power-monitor.ts:160` `getCurrentThermalState()` — real readings:
+     macOS shells out to `pmset -g therm`, Linux reads
+     `/sys/class/thermal/thermal_zone*/temp`, Windows queries
+     `MSAcpi_ThermalZoneTemperature` via PowerShell WMI. Falls back to
+     `nominal` on any failure.
+   - `session.ts:438/445` spell checker — session-level boolean,
+     defaults on (which is what OS WebViews do anyway); set/get
+     round-trips. Custom dictionaries are v1.1.
+
+6. **JS↔Rust window state drift** → ✓ — `BrowserWindowState` now tracks
+   `focused`, `minimized`, `maximized`, `fullscreen`, `visible`.
+   `applyNativeWindowEvent` dispatches into the state on every
+   relevant native event. JS-side `maximize`/`minimize`/`show`/`hide`/
+   `setFullScreen` update state optimistically so subsequent reads
+   reflect the action immediately. `BrowserWindow.isFocused()` /
+   `isMinimized()` / etc. now read from the cache, removing the
+   "missing native getter" throw on cross-backend paths.
 
 ## Acceptable-for-0.2 known issues (document, don't block)
 

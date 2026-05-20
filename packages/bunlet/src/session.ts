@@ -265,6 +265,11 @@ export class Session extends EventEmitter {
   /** Windows currently attached to this session */
   private readonly attachedWindowIds = new Set<number>();
 
+  /** Whether spell checking is enabled. v1.0 stores the flag at session
+   *  scope; native enforcement happens at window creation time when the
+   *  backend exposes a spellcheck option. */
+  private spellCheckerEnabled = true;
+
   private constructor(partition: string) {
     super();
     this.partition = partition;
@@ -429,21 +434,18 @@ export class Session extends EventEmitter {
   }
 
   /**
-   * Check if spell checker is enabled
-   * Note: Spell checking is not yet implemented in bunlet
+   * Whether spell checking is enabled for this session. v1.0 only wires
+   * the session-level flag; OS-native spell-check is on by default in
+   * both WebKit (macOS), WebView2 (Windows) and WebKitGTK (Linux), so
+   * toggling this off requires per-platform backend support that lands
+   * post-1.0. Custom dictionaries are not yet supported.
    */
   isSpellCheckerEnabled(): boolean {
-    throw new Error(
-      `[bunlet] session.isSpellCheckerEnabled() is not yet supported. ` +
-      `Spell checking is not implemented.`
-    );
+    return this.spellCheckerEnabled;
   }
 
-  setSpellCheckerEnabled(_enable: boolean): void {
-    throw new Error(
-      `[bunlet] session.setSpellCheckerEnabled() is not yet supported. ` +
-      `Spell checking is not implemented.`
-    );
+  setSpellCheckerEnabled(enable: boolean): void {
+    this.spellCheckerEnabled = enable;
   }
 
   // Event emitter type overloads

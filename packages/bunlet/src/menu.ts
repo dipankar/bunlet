@@ -221,17 +221,17 @@ export class Menu {
   static setApplicationMenu(menu: Menu | null): void {
     ensureMenuEventsInitialized();
     native.setApplicationMenu(menu?.nativeId ?? undefined);
+    Menu.currentAppMenu = menu;
   }
 
   /**
-   * Get the current application menu
+   * Get the current application menu, or null if none is set.
    */
   static getApplicationMenu(): Menu | null {
-    throw new Error(
-      `[bunlet] Menu.getApplicationMenu() is not yet supported. ` +
-      `Application menu reconstruction from native ID is not implemented.`
-    );
+    return Menu.currentAppMenu;
   }
+
+  private static currentAppMenu: Menu | null = null;
 
   /**
    * Append a menu item
@@ -268,14 +268,23 @@ export class Menu {
   }
 
   /**
-   * Close the popup menu
-   * @param window - Window to close popup for
+   * Dismiss the currently-visible context menu, if any.
+   *
+   * In v1.0 this is a best-effort no-op: the OS dismisses popups on the
+   * next user interaction (click outside, item select, Escape) on all
+   * supported platforms, so an explicit programmatic close is rarely
+   * needed. If `native.closeContextMenu` is exposed by the backend, this
+   * call delegates to it; otherwise it returns silently.
    */
-  closePopup(_window?: BrowserWindow): void {
-    throw new Error(
-      `[bunlet] Menu.closePopup() is not yet supported. ` +
-      `Context menu dismissal is not implemented.`
-    );
+  closePopup(window?: BrowserWindow): void {
+    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+    if (typeof nativeAny.closeContextMenu === 'function') {
+      try {
+        nativeAny.closeContextMenu(window?.id ?? 0);
+      } catch {
+        // best-effort
+      }
+    }
   }
 
   /**

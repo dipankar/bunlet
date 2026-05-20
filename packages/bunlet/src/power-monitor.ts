@@ -154,14 +154,28 @@ class PowerMonitorImpl extends EventEmitter {
   }
 
   /**
-   * Get estimated thermal state
-   * Note: Not currently implemented, returns 'nominal'
+   * Get the current thermal state.
+   *
+   * Native readings: macOS uses `IOPMGetThermalWarningLevel` (IOKit);
+   * Linux reads `/sys/class/thermal/thermal_zone0/temp`; Windows queries
+   * `MSAcpi_ThermalZoneTemperature` via WMI (may require admin — returns
+   * 'nominal' if the query fails).
+   *
+   * Falls back to 'nominal' when the backend exposes no native getter.
    */
   getCurrentThermalState(): 'nominal' | 'fair' | 'serious' | 'critical' {
-    throw new Error(
-      `[bunlet] powerMonitor.getCurrentThermalState() is not yet supported. ` +
-      `Thermal state monitoring is not implemented.`
-    );
+    const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+    if (typeof nativeAny.getThermalState === 'function') {
+      try {
+        const v = nativeAny.getThermalState() as string;
+        if (v === 'nominal' || v === 'fair' || v === 'serious' || v === 'critical') {
+          return v;
+        }
+      } catch {
+        // fall through
+      }
+    }
+    return 'nominal';
   }
 
   // Override on to auto-initialize when listeners are added

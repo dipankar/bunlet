@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-20
+
+Version-alignment release. v0.2.3 successfully published
+`@bunlet/native`, `@bunlet/cef`, `@bunlet/core` to npm and
+`bunlet-native`, `bunlet-cef-native` to crates.io. The fourth npm
+package, **`@bunlet/cli`**, refused with:
+
+> Cannot implicitly apply the "latest" tag because previously published
+> version 0.3.0 is higher than the new version 0.2.3.
+
+`@bunlet/cli@0.3.0` had been published 2026-05-15, before this
+production-readiness work began — the version-bump script overwrote
+that in source to keep all package versions in sync, but the npm
+registry remembered. Bumping everything to 0.3.1 unblocks the CLI
+publish and re-syncs all packages.
+
+### Changed
+
+- All packages and crates synced at version 0.3.1, skipping past the
+  legacy `@bunlet/cli@0.3.0` so a single tag publishes the whole
+  workspace atomically.
+
 ## [0.2.3] - 2026-05-20
 
 Third republish for the v0.2 line. v0.2.2's `npm install -g npm@latest`

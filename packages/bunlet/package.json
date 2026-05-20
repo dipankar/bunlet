@@ -1,6 +1,6 @@
 {
   "name": "@bunlet/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build cross-platform desktop apps with Bun and WebView — a lightweight, familiar alternative to Electron",
   "type": "module",
   "main": "dist/index.js",

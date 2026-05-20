@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-05-20
+
+Second republish for the v0.2 line. v0.2.1's npm publish failed
+because Node 22 ships npm 10.x, which can sign provenance via OIDC but
+cannot exchange the OIDC token for an npm publish credential — npm OIDC
+trusted publishing requires **npm >= 11.5.1**. Symptom in v0.2.1 was a
+confusing `404 Not Found` after a successful sigstore attestation.
+
+### Fixed
+
+- **release(npm):** add an explicit `npm install -g npm@latest` step
+  after `actions/setup-node@v4` so the publish job uses npm 11.x
+  regardless of the bundled Node LTS version.
+
 ## [0.2.1] - 2026-05-20
 
 Republish release for v0.2.0. No code changes — only the release

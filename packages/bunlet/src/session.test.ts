@@ -67,4 +67,15 @@ describe('session model', () => {
 
     expect(customSession.partition).toBe('persist:ephemeral');
   });
+
+  test('spell-check flag round-trips and defaults on', () => {
+    const s = Session.fromPartition('spell-test');
+    expect(s.isSpellCheckerEnabled()).toBe(true);
+
+    s.setSpellCheckerEnabled(false);
+    expect(s.isSpellCheckerEnabled()).toBe(false);
+
+    s.setSpellCheckerEnabled(true);
+    expect(s.isSpellCheckerEnabled()).toBe(true);
+  });
 });

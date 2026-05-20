@@ -104,6 +104,20 @@ class App extends EventEmitter {
 
       native.initApp();
 
+      // Linux: cache primary display info while GTK is freshly initialized.
+      // Subsequent screen queries return cached data, sidestepping GDK
+      // re-entrancy hangs once the event loop is running.
+      const nativeAny = native as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (typeof nativeAny.primeScreenCache === 'function') {
+        try {
+          nativeAny.primeScreenCache();
+        } catch (err) {
+          if (process.env.BUNLET_DEBUG) {
+            console.warn('[bunlet] primeScreenCache failed (non-fatal):', err);
+          }
+        }
+      }
+
       // Set up IPC handler
       native.setIpcHandler((msg: { windowId: number; message: string }) => {
         this.handleIpcMessage(msg.windowId, msg.message);

@@ -474,6 +474,114 @@ fn get_battery_info_windows() -> BatteryInfo {
     }
 }
 
+/// Best-effort thermal-state probe.
+///
+/// Returns one of `nominal | fair | serious | critical`. Implementations
+/// shell out to OS tools instead of binding IOKit/WMI directly — fewer
+/// deps, easier to keep building across all 3 OS. When parsing fails or
+/// the OS gives no usable signal, returns `nominal`.
+#[napi]
+pub fn get_thermal_state() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        thermal_state_linux()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        thermal_state_macos()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        thermal_state_windows()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        "nominal".to_string()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn thermal_state_linux() -> String {
+    use std::fs;
+    let mut hottest_milli_c: Option<i64> = None;
+    for zone in 0..8 {
+        let path = format!("/sys/class/thermal/thermal_zone{}/temp", zone);
+        if let Ok(s) = fs::read_to_string(&path) {
+            if let Ok(v) = s.trim().parse::<i64>() {
+                hottest_milli_c = Some(hottest_milli_c.map(|prev| prev.max(v)).unwrap_or(v));
+            }
+        }
+    }
+    let milli = hottest_milli_c.unwrap_or(0);
+    let c = milli / 1000;
+    match c {
+        c if c < 60 => "nominal",
+        c if c < 75 => "fair",
+        c if c < 90 => "serious",
+        _ => "critical",
+    }
+    .to_string()
+}
+
+#[cfg(target_os = "macos")]
+fn thermal_state_macos() -> String {
+    // `pmset -g therm` prints e.g. CPU_Speed_Limit = 100. Drops below 100
+    // indicate thermal pressure; map deeper drops to worse states.
+    let output = std::process::Command::new("pmset")
+        .args(["-g", "therm"])
+        .output();
+    let Ok(out) = output else {
+        return "nominal".to_string();
+    };
+    let s = String::from_utf8_lossy(&out.stdout);
+    let mut speed: i64 = 100;
+    for line in s.lines() {
+        if line.contains("CPU_Speed_Limit") {
+            if let Some(eq) = line.split('=').nth(1) {
+                if let Ok(v) = eq.trim().parse::<i64>() {
+                    speed = v;
+                }
+            }
+        }
+    }
+    match speed {
+        s if s >= 100 => "nominal",
+        s if s >= 80 => "fair",
+        s if s >= 50 => "serious",
+        _ => "critical",
+    }
+    .to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn thermal_state_windows() -> String {
+    // WMI MSAcpi_ThermalZoneTemperature reports kelvin * 10. Many systems
+    // refuse without admin or expose no zones at all; return nominal
+    // rather than throw in that case.
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-WmiObject -Namespace 'root\\WMI' -Class 'MSAcpi_ThermalZoneTemperature' -ErrorAction SilentlyContinue | Measure-Object -Property CurrentTemperature -Maximum).Maximum",
+        ])
+        .output();
+    let Ok(out) = output else {
+        return "nominal".to_string();
+    };
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let Some(kelvin_x10) = raw.trim().parse::<f64>().ok() else {
+        return "nominal".to_string();
+    };
+    let c = kelvin_x10 / 10.0 - 273.15;
+    match c {
+        c if c < 60.0 => "nominal",
+        c if c < 75.0 => "fair",
+        c if c < 90.0 => "serious",
+        _ => "critical",
+    }
+    .to_string()
+}
+
 #[cfg(target_os = "windows")]
 fn get_idle_time_windows() -> i64 {
     // Use PowerShell with user32.dll GetLastInputInfo

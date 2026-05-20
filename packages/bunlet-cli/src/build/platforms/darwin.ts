@@ -9,7 +9,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { generateInfoPlist, type AppManifest } from '../manifest';
 import { generateIconsForPlatform } from '../icons';
-import type { SignOptions } from '../packager';
+import type { SignOptions, NotarizeOptions } from '../packager';
 
 export interface DarwinBuildOptions {
   name: string;
@@ -273,6 +273,63 @@ async function signApp(
   codesignArgs.push(`"${appPath}"`);
 
   execSync(codesignArgs.join(' '), { stdio: 'pipe' });
+}
+
+/**
+ * Notarize a signed .dmg or .app via Apple's notary service.
+ *
+ * Reads credentials from `options` first, falls back to env vars
+ * (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`). Throws a
+ * descriptive error when any required credential is missing — does NOT
+ * silently skip. On success, by default also runs `xcrun stapler staple`
+ * so the notarization ticket is bundled with the artifact for offline
+ * Gatekeeper validation.
+ *
+ * Requires Xcode 13+ (for `notarytool`). The wrapper does not run real
+ * notarization in CI in this PR — it gives a working entry point for
+ * release pipelines that have Apple Developer credentials.
+ */
+export async function notarizeDarwinApp(
+  artifactPath: string,
+  options: NotarizeOptions = {}
+): Promise<void> {
+  const appleId = options.appleId ?? process.env.APPLE_ID;
+  const teamId = options.teamId ?? process.env.APPLE_TEAM_ID;
+  const password = options.appSpecificPassword ?? process.env.APPLE_APP_SPECIFIC_PASSWORD;
+
+  const missing: string[] = [];
+  if (!appleId) missing.push('APPLE_ID');
+  if (!teamId) missing.push('APPLE_TEAM_ID');
+  if (!password) missing.push('APPLE_APP_SPECIFIC_PASSWORD');
+  if (missing.length > 0) {
+    throw new Error(
+      `[bunlet] notarizeDarwinApp: missing credential(s): ${missing.join(', ')}. ` +
+        `Set the env vars or pass them in NotarizeOptions. ` +
+        `See docs/packaging/signing.md.`
+    );
+  }
+  if (!fs.existsSync(artifactPath)) {
+    throw new Error(`[bunlet] notarizeDarwinApp: artifact does not exist: ${artifactPath}`);
+  }
+
+  const args = [
+    'xcrun',
+    'notarytool',
+    'submit',
+    `"${artifactPath}"`,
+    '--apple-id',
+    `"${appleId}"`,
+    '--team-id',
+    `"${teamId}"`,
+    '--password',
+    `"${password}"`,
+    '--wait',
+  ];
+  execSync(args.join(' '), { stdio: 'inherit' });
+
+  if (options.staple !== false) {
+    execSync(`xcrun stapler staple "${artifactPath}"`, { stdio: 'inherit' });
+  }
 }
 
 /**

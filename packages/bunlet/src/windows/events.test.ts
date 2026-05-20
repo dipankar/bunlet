@@ -16,6 +16,11 @@ function createTarget() {
     destroyed: boolean;
     closeRequests: number;
     markClosedCalls: number;
+    focused: boolean;
+    minimized: boolean;
+    maximized: boolean;
+    fullscreen: boolean;
+    visible: boolean;
     getBounds(): import('../types').Rectangle | undefined;
   } = {
     windowTitle: 'Window',
@@ -24,6 +29,11 @@ function createTarget() {
     destroyed: false,
     closeRequests: 0,
     markClosedCalls: 0,
+    focused: false,
+    minimized: false,
+    maximized: false,
+    fullscreen: false,
+    visible: true,
     getBounds(): import('../types').Rectangle | undefined {
       return bounds;
     },
@@ -65,6 +75,21 @@ function createTarget() {
     updateBounds(b: import('../types').Rectangle) {
       bounds = b;
     },
+    setFocused(v: boolean) {
+      target.focused = v;
+    },
+    setMinimized(v: boolean) {
+      target.minimized = v;
+    },
+    setMaximized(v: boolean) {
+      target.maximized = v;
+    },
+    setFullscreen(v: boolean) {
+      target.fullscreen = v;
+    },
+    setVisible(v: boolean) {
+      target.visible = v;
+    },
   } satisfies NativeWindowEventTarget & {
     windowTitle: string;
     pageTitle: string;
@@ -72,6 +97,11 @@ function createTarget() {
     destroyed: boolean;
     closeRequests: number;
     markClosedCalls: number;
+    focused: boolean;
+    minimized: boolean;
+    maximized: boolean;
+    fullscreen: boolean;
+    visible: boolean;
     getBounds(): import('../types').Rectangle | undefined;
   };
 

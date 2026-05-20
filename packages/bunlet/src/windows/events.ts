@@ -27,6 +27,11 @@ export interface NativeWindowEventTarget {
   requestClose(): void;
   markClosed(): void;
   updateBounds(bounds: Rectangle): void;
+  setFocused(focused: boolean): void;
+  setMinimized(minimized: boolean): void;
+  setMaximized(maximized: boolean): void;
+  setFullscreen(fullscreen: boolean): void;
+  setVisible(visible: boolean): void;
 }
 
 export function applyNativeWindowEvent(
@@ -35,9 +40,11 @@ export function applyNativeWindowEvent(
 ): void {
   switch (event.event) {
     case 'window-focus':
+      target.setFocused(true);
       target.emit('focus');
       break;
     case 'window-blur':
+      target.setFocused(false);
       target.emit('blur');
       break;
     case 'window-resize':
@@ -98,22 +105,38 @@ export function applyNativeWindowEvent(
       }
       break;
     case 'window-maximized':
+      target.setMaximized(true);
+      target.setMinimized(false);
       target.emit('maximize');
       break;
     case 'window-unmaximized':
+      target.setMaximized(false);
       target.emit('unmaximize');
       break;
     case 'window-minimized':
+      target.setMinimized(true);
       target.emit('minimize');
       break;
     case 'window-restored':
+      target.setMinimized(false);
+      target.setMaximized(false);
       target.emit('restore');
       break;
     case 'window-entered-fullscreen':
+      target.setFullscreen(true);
       target.emit('enter-full-screen');
       break;
     case 'window-left-fullscreen':
+      target.setFullscreen(false);
       target.emit('leave-full-screen');
+      break;
+    case 'window-shown':
+      target.setVisible(true);
+      target.emit('show');
+      break;
+    case 'window-hidden':
+      target.setVisible(false);
+      target.emit('hide');
       break;
     case 'window-scale-factor-changed':
       if (typeof event.scaleFactor === 'number') {

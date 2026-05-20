@@ -10,6 +10,11 @@ export class BrowserWindowState {
   private title: string;
   private destroyed = false;
   private bounds: Rectangle | undefined;
+  private focused = false;
+  private minimized = false;
+  private maximized = false;
+  private fullscreen = false;
+  private visible = true;
 
   constructor(initialTitle: string) {
     this.title = initialTitle;
@@ -37,6 +42,46 @@ export class BrowserWindowState {
 
   updateBounds(bounds: Rectangle): void {
     this.bounds = bounds;
+  }
+
+  isFocused(): boolean {
+    return this.focused;
+  }
+
+  setFocused(value: boolean): void {
+    this.focused = value;
+  }
+
+  isMinimized(): boolean {
+    return this.minimized;
+  }
+
+  setMinimized(value: boolean): void {
+    this.minimized = value;
+  }
+
+  isMaximized(): boolean {
+    return this.maximized;
+  }
+
+  setMaximized(value: boolean): void {
+    this.maximized = value;
+  }
+
+  isFullscreen(): boolean {
+    return this.fullscreen;
+  }
+
+  setFullscreen(value: boolean): void {
+    this.fullscreen = value;
+  }
+
+  isVisible(): boolean {
+    return this.visible;
+  }
+
+  setVisible(value: boolean): void {
+    this.visible = value;
   }
 }
 
